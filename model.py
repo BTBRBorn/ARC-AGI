@@ -22,6 +22,7 @@ class MaskedSelfAttention(nn.Module):
         self.config = config
         self.QKV = nn.Linear(config.emb_dim, 3 * config.emb_dim, bias=False)
         self.proj = nn.Linear(config.emb_dim, config.emb_dim)
+        self.flash_attention = True
 
         self.register_buffer(
             "tril",
@@ -45,16 +46,18 @@ class MaskedSelfAttention(nn.Module):
         V = V.view(B, T, self.config.n_head, self.config.head_size).transpose(
             1, 2
         )  # (B, T, C) -> (B, n_head, T, head_size)
+        if self.flash_attention:
+            y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
+        else: 
+            att = (Q @ K.transpose(-2, -1)) * (
+                self.config.head_size**-0.5
+            )  # (B, n_head, T, head_size) -> (B, n_head, T, T)
+            att = att.masked_fill(self.tril[:T, :T] == 0.0, float("-inf"))
+            att = F.softmax(att, dim=-1)
 
-        att = (Q @ K.transpose(-2, -1)) * (
-            self.config.head_size**-0.5
-        )  # (B, n_head, T, head_size) -> (B, n_head, T, T)
-        att = att.masked_fill(self.tril[:T, :T] == 0.0, float("-inf"))
-        att = F.softmax(att, dim=-1)
-
-        y = (
-            att @ V
-        )  # (B, n_head, T, T) @ (B, n_head, T, head_size) -> (B, n_head, T, head_size)
+            y = (
+                att @ V
+            )  # (B, n_head, T, T) @ (B, n_head, T, head_size) -> (B, n_head, T, head_size)
 
         y = y.transpose(2, 1).reshape(B, T, C)
 

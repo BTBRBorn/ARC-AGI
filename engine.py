@@ -6,7 +6,8 @@ def train_step(model,
                dataloader,
                optimizer,
                config):
-    
+
+    total_loss = 0.0    
     model.train()
     for (x, y) in dataloader:
         x, y = x.to(config.device), y.to(config.device)
@@ -14,10 +15,11 @@ def train_step(model,
         optimizer.zero_grad()
         logits = model(x) 
         loss = F.cross_entropy(logits.view(B*T, config.vocab_size), y.view(B*T))
+        total_loss += loss.item()
         loss.backward()
         optimizer.step()
 
-    return loss.item()
+    return total_loss / len(dataloader)
 
 def val_step(model,
              dataloader,

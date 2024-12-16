@@ -11,7 +11,7 @@ wheels/
 
 #Project specific
 .vscode/
-data/
+data/*/
 playground.ipynb
 
 #uv specific

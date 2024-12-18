@@ -9,7 +9,10 @@ class MLP(nn.Module):
         config = kwargs["config"]
         self.e_proj = nn.Linear(config.emb_dim, 4 * config.emb_dim)
         self.gelu = nn.GELU()
+
         self.c_proj = nn.Linear(config.emb_dim * 4, config.emb_dim)
+        assert not hasattr(self.c_proj, "RESIDUAL_INIT")
+        self.c_proj.RESIDUAL_INIT = 1
 
     def forward(self, x: torch.Tensor):
         return self.c_proj(self.gelu(self.e_proj(x)))
@@ -21,7 +24,11 @@ class MaskedSelfAttention(nn.Module):
         config = kwargs["config"]
         self.config = config
         self.QKV = nn.Linear(config.emb_dim, 3 * config.emb_dim, bias=False)
+
         self.proj = nn.Linear(config.emb_dim, config.emb_dim)
+        assert not hasattr(self.proj, "RESIDUAL_INIT")
+        self.proj.RESIDUAL_INIT = 1
+
         self.flash_attention = True
 
         self.register_buffer(
@@ -48,7 +55,7 @@ class MaskedSelfAttention(nn.Module):
         )  # (B, T, C) -> (B, n_head, T, head_size)
         if self.flash_attention:
             y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
-        else: 
+        else:
             att = (Q @ K.transpose(-2, -1)) * (
                 self.config.head_size**-0.5
             )  # (B, n_head, T, head_size) -> (B, n_head, T, T)
@@ -98,6 +105,20 @@ class GPT(nn.Module):
 
         self.f_head.weight = self.wte.weight
         assert id(self.f_head.weight) == id(self.wte.weight)
+
+        self.apply(self._weight_init)
+
+    def _weight_init(self, module):
+        if isinstance(module, nn.Linear):
+            std = module.in_features ** (-0.5)
+            if hasattr(module, "RESIDUAL_INIT"):
+                std *= self.config.n_layer ** (-0.5)
+            nn.init.normal_(module.weight, mean=0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            std = self.config.emb_dim ** (-0.5)
+            nn.init.normal_(module.weight, mean=0, std=std)
 
     def forward(self, x: torch.Tensor):
         B, T = x.size()

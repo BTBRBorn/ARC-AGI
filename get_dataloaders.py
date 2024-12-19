@@ -18,7 +18,7 @@ class CustomDataset(Dataset):
     def __getitem__(self, idx):
         buffer = self.data[idx * self.buffer_size : (idx + 1) * self.buffer_size]
         if len(buffer) != self.buffer_size:
-            buffer = self.data[-self.buffer_size:]
+            buffer = self.data[-self.buffer_size :]
 
         buffer = torch.tensor(buffer, dtype=torch.long)
         x, y = buffer[:-1], buffer[1:]

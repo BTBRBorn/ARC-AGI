@@ -11,13 +11,15 @@ def train_step(model, dataloader, optimizer, config):
         x, y = x.to(config.device), y.to(config.device)
         B, T = x.size()
         optimizer.zero_grad()
-        logits = model(x)
-        loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+        with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
+            logits = model(x)
+            loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
         total_loss += loss.item()
         loss.backward()
+        norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
-    return total_loss / len(dataloader)
+    return total_loss / len(dataloader), norm
 
 
 def val_step(model, dataloader, config):
@@ -27,25 +29,28 @@ def val_step(model, dataloader, config):
         for x, y in dataloader:
             x, y = x.to(config.device), y.to(config.device)
             B, T = x.size()
-            logits = model(x)
-            loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+            with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
+                logits = model(x)
+                loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
             total_loss += loss.item()
 
     return total_loss / len(dataloader)
 
 
-def train(model, train_dataloader, val_dataloader, optimizer, config):
+def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config):
     total_tokens = (
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
     )
     for epoch in tqdm(range(config.num_epochs)):
         start = time.time()
-        train_loss = train_step(model, train_dataloader, optimizer, config)
+        train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)
+        scheduler.step(val_loss)
+        lr = scheduler.get_last_lr()
         end = time.time()
         token_per_sec = total_tokens / (end - start)
         print(
-            f"Epoch: {epoch+1}: Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, \
-              tokens/sec:{token_per_sec:.2f}"
+            f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, " + \
+            f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"
         )

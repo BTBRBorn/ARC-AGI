@@ -1,5 +1,5 @@
 import pytest
-from data import prepare
+from get_dataloaders import flatten, add_special_tokens, change_colors
 import numpy as np
 
 
@@ -22,20 +22,21 @@ def data():
 def test_flatten():
     nested = [list(range(0, 5)), list(range(5, 10)), list(range(10, 15))]
     flattened = list(range(15))
-    assert prepare.flatten(nested) == flattened
+    assert flatten(nested) == flattened
 
 
-def test_create_array_without_special(data):
+def test_add_special_tokens_without(data):
+
     train_data_without_special = np.array(
-        [1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 8, 2, 4, 1, 1, 1], dtype=np.uint16
+        [1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 8, 2, 4, 1, 1, 1, 28, 28], dtype=np.uint16
     )
     test_data_without_special = np.array(
-        [1, 0, 5, 1, 0, 1, 8, 1, 1, 2, 8, 2, 4, 1, 1, 7], dtype=np.uint16
+        [1, 0, 5, 1, 0, 1, 8, 1, 1, 2, 8, 2, 4, 1, 1, 7, 28, 28], dtype=np.uint16
     )
 
-    assert (train_data_without_special == prepare.create_array(data)).all()
+    assert (train_data_without_special == add_special_tokens(data)).all()
     assert (
-        test_data_without_special == prepare.create_array(data, is_train=False)
+        test_data_without_special == add_special_tokens(data, is_train=False)
     ).all()
 
 
@@ -45,8 +46,7 @@ def test_create_data_with_special_tokens(data):
         "end_of_input": 25,
         "start_of_output": 26,
         "end_of_output": 27,
-        "start_of_task": 30,
-        "end_of_task": 31,
+        "fill_value": 28,
     }
 
     train_data = np.array(

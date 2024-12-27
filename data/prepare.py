@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import numpy as np
 import argparse
-import random
 from dataclasses import dataclass
 import os
 
@@ -15,14 +14,14 @@ def flatten(nested: list[list]) -> list:
 
 
 def create_array(
-    json_file, special_tokens=None, add_special_tokens=False, is_train=True
+    json_file, special_tokens=None, is_train=True
 ):
     if is_train:
         json_file = json_file["train"]
     else:
         json_file = json_file["test"]
 
-    if add_special_tokens:
+    if special_tokens is not None:
         data = flatten(
             [
                 [special_tokens["start_of_input"]]
@@ -49,24 +48,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--data_path", type=str, default="data/training/")
-    parser.add_argument("--val_ratio", type=float, default=0.1)
 
     args = parser.parse_args()
 
     @dataclass
     class Config:
         data_path: str = args.data_path
-        val_ratio: float = args.val_ratio
 
     config = Config()
 
     data_path = Path(config.data_path)
     file_list = os.listdir(data_path)
-
-    num_val_files = int(len(file_list) * config.val_ratio)
-    assert num_val_files > 0
-    val_set = set(random.sample(file_list, num_val_files))
-    train_set = set(file for file in file_list if file not in val_set)
 
     array_list = []
     for file in file_list:
@@ -92,14 +84,14 @@ if __name__ == "__main__":
         special_tokens[key] = max_value + 1
         max_value += 1
 
-    def create_dataset(save_path, file_list, name):
+    def create_dataset(save_path, file_list, name, is_train=True):
         array_list = []
         for file in file_list:
             with open(data_path / file, "r") as fhandle:
                 json_file = json.load(fhandle)
             array_list.append(
                 create_array(
-                    json_file, special_tokens=special_tokens, add_special_tokens=True
+                    json_file, special_tokens=special_tokens, is_train=is_train
                 )
             )
         all_tokens = np.concatenate(array_list)
@@ -109,5 +101,8 @@ if __name__ == "__main__":
 
     pretraining_path.mkdir(exist_ok=True, parents=True)
 
-    create_dataset(pretraining_path, train_set, "training.npy")
-    create_dataset(pretraining_path, val_set, "validation.npy")
+    create_dataset(pretraining_path, file_list, "training.npy")
+    create_dataset(pretraining_path, file_list, "validation.npy", is_train=False)
+
+    with open(pretraining_path / 'special_tokens.json', 'w') as fhandle:
+        json.dump(special_tokens, fhandle)

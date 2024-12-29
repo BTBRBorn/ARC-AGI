@@ -46,3 +46,30 @@ class Tokenizer:
         data = data + [self.special_tokens["fill_value"]] * (block_size - len(data) + 1)
 
         return data
+
+    def decode(self, tokens):
+        examples = []
+        context = None
+        for token in tokens:
+            if token == self.special_tokens["start_of_input"]:
+                example = {"input": []}
+                row = []
+                context = "input"
+            elif token == self.special_tokens["end_of_input"]:
+                example["input"].append(row)
+            elif token == self.special_tokens["start_of_output"]:
+                example["output"] = []
+                row = []
+                context = "output"
+            elif token == self.special_tokens["end_of_output"]:
+                example["output"].append(row)
+                examples.append(example)
+            elif token == self.special_tokens["row_indicator"]:
+                example[context].append(row)
+                row = []
+            elif token == self.special_tokens["fill_value"]:
+                continue
+            else:
+                row.append(token)
+
+        return examples

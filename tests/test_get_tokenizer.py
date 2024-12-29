@@ -125,3 +125,9 @@ def test_encode(data, tokenizer):
     assert train_data == tokenizer.encode(data["train"], block_size=30)
     assert test_data == tokenizer.encode(data["test"], block_size=30)
     
+def test_decode(tokenizer, data):
+    train_tokens = tokenizer.encode(data["train"], block_size=64)
+    test_tokens = tokenizer.encode(data["test"], block_size=64)
+    assert tokenizer.decode(train_tokens) == data["train"]
+    assert tokenizer.decode(test_tokens) == data["test"]
+

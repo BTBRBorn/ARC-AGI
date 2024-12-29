@@ -5,18 +5,19 @@ import torch
 import model
 import get_dataloaders
 import engine
+from get_tokenizer import Tokenizer
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-3)
 parser.add_argument("--vocab_size", type=int, default=256)
-parser.add_argument("--block_size", type=int, default=7300)
+parser.add_argument("--block_size", type=int, default=7500)
 parser.add_argument("--test_block_size", type=int, default=2056)
-parser.add_argument("--n_layer", type=int, default=6)
+parser.add_argument("--n_layer", type=int, default=2)
 parser.add_argument("--batch_size", type=int, default=8)
-parser.add_argument("--head_size", type=int, default=8)
-parser.add_argument("--n_head", type=int, default=4)
+parser.add_argument("--head_size", type=int, default=2)
+parser.add_argument("--n_head", type=int, default=2)
 parser.add_argument("--data_path", type=str, default="data/training")
 parser.add_argument("--dl_num_workers", type=int, default=2)
 
@@ -67,7 +68,7 @@ optim_groups = [
 optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1)
 
-train_dataloader, val_dataloader = get_dataloaders.create_dataloaders(config)
-
+tokenizer = Tokenizer(config.vocab_size)
+train_dataloader, val_dataloader = get_dataloaders.create_dataloaders(config, tokenizer)
 
 engine.train(gpt, train_dataloader, val_dataloader, optimizer, scheduler, config)

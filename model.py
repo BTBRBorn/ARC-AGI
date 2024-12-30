@@ -54,7 +54,8 @@ class MaskedSelfAttention(nn.Module):
             1, 2
         )  # (B, T, C) -> (B, n_head, T, head_size)
         if self.flash_attention:
-            y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
+            with nn.attention.sdpa_kernel(nn.attention.SDPBackend.FLASH_ATTENTION):
+                y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
         else:
             att = (Q @ K.transpose(-2, -1)) * (
                 self.config.head_size**-0.5

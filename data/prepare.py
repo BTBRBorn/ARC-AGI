@@ -7,11 +7,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--source_file", type=str)
+    parser.add_argument("--solutions_file", type=str)
     parser.add_argument("--target_dir", type=str)
 
     args = parser.parse_args()
 
-    source_file, target_dir = Path(args.source_file), Path(args.target_dir)
+    source_file, target_dir, solutions_file = (
+        Path(args.source_file),
+        Path(args.target_dir),
+        Path(args.solutions_file),
+    )
 
     if target_dir.exists():
         shutil.rmtree(target_dir)
@@ -21,6 +26,13 @@ if __name__ == "__main__":
 
     with open(source_file, "r") as fhandle:
         source_json = json.load(fhandle)
+    
+    with open(solutions_file, "r") as fhandle:
+        solutions_json = json.load(fhandle)
+
+    for key, task in source_json.items():
+        for idx, example in enumerate(task['test']):
+            example['output'] = solutions_json[key][idx]
 
     for key in source_json.keys():
         file_name = key + ".json"

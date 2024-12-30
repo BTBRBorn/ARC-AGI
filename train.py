@@ -44,7 +44,7 @@ class Config:
     head_size: int = args.head_size
     n_head: int = args.n_head
     emb_dim: int = head_size * n_head
-    data_path: int = Path(args.data_path)
+    data_path: Path = Path(args.data_path)
     device: str = device
     dl_num_workers: int = args.dl_num_workers
     compile_model: int = args.compile_model

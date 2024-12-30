@@ -10,8 +10,8 @@ from get_tokenizer import Tokenizer
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
-parser.add_argument("--learning_rate", type=float, default=1e-3)
-parser.add_argument("--vocab_size", type=int, default=256)
+parser.add_argument("--learning_rate", type=float, default=1e-2)
+parser.add_argument("--vocab_size", type=int, default=32)
 parser.add_argument("--block_size", type=int, default=7500)
 parser.add_argument("--test_block_size", type=int, default=2056)
 parser.add_argument("--n_layer", type=int, default=2)

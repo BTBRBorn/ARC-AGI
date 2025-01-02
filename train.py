@@ -20,8 +20,9 @@ parser.add_argument("--head_size", type=int, default=2)
 parser.add_argument("--n_head", type=int, default=2)
 parser.add_argument("--data_path", type=str, default="data/training")
 parser.add_argument("--dl_num_workers", type=int, default=2)
-parser.add_argument("--compile_model", type=int, default=1)
+parser.add_argument("--compile_model", type=int, choices={0, 1}, default=1)
 parser.add_argument("--attention_mode", type=str, default="flash_attention")
+parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
 
 args = parser.parse_args()
 
@@ -50,6 +51,7 @@ class Config:
     dl_num_workers: int = args.dl_num_workers
     compile_model: int = args.compile_model
     attention_mode: str = args.attention_mode
+    use_mixed_precision: int = args.use_mixed_precision
 
 
 config = Config()

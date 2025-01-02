@@ -29,8 +29,6 @@ class MaskedSelfAttention(nn.Module):
         assert not hasattr(self.proj, "RESIDUAL_INIT")
         self.proj.RESIDUAL_INIT = 1
 
-        self.flash_attention = True
-
         self.register_buffer(
             "tril",
             torch.tril(
@@ -38,7 +36,7 @@ class MaskedSelfAttention(nn.Module):
             ),
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, attention_mode):
         B, T, C = x.size()
         Q, K, V = self.QKV(x).split(
             self.config.emb_dim, dim=2
@@ -53,10 +51,15 @@ class MaskedSelfAttention(nn.Module):
         V = V.view(B, T, self.config.n_head, self.config.head_size).transpose(
             1, 2
         )  # (B, T, C) -> (B, n_head, T, head_size)
-        if self.flash_attention:
+        if attention_mode == "flash_attention":
             with nn.attention.sdpa_kernel(nn.attention.SDPBackend.FLASH_ATTENTION):
                 y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
-        else:
+
+        elif attention_mode == "efficient_memory":
+            with nn.attention.sdpa_kernel(nn.attention.SDPBackend.EFFICIENT_ATTENTION):
+                y = F.scaled_dot_product_attention(Q, K, V, is_causal=True)
+
+        elif attention_mode == "standard":
             att = (Q @ K.transpose(-2, -1)) * (
                 self.config.head_size**-0.5
             )  # (B, n_head, T, head_size) -> (B, n_head, T, T)
@@ -66,6 +69,11 @@ class MaskedSelfAttention(nn.Module):
             y = (
                 att @ V
             )  # (B, n_head, T, T) @ (B, n_head, T, head_size) -> (B, n_head, T, head_size)
+
+        else:
+            raise ValueError(
+                "attention_mode has to be 'flash_attention', 'efficient_memory' or 'standard'."
+            )
 
         y = y.transpose(2, 1).reshape(B, T, C)
 
@@ -81,8 +89,8 @@ class Block(nn.Module):
         self.ln2 = nn.LayerNorm(config.emb_dim)
         self.mlp = MLP(config=config)
 
-    def forward(self, x: torch.Tensor):
-        x = x + self.msa(self.ln1(x))
+    def forward(self, x: torch.Tensor, attention_mode):
+        x = x + self.msa(self.ln1(x), attention_mode)
         x = x + self.mlp(self.ln2(x))
         return x
 
@@ -121,9 +129,9 @@ class GPT(nn.Module):
             std = self.config.emb_dim ** (-0.5)
             nn.init.normal_(module.weight, mean=0, std=std)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, attention_mode):
         B, T = x.size()
         x = self.wte(x) + self.pte(self.pos_inx[:T])  # (B, T, C) + (T, C) -> (B, T, C)
         for block in self.blocks:
-            x = block(x)  # (B, T, C) -> (B, T, C)
+            x = block(x, attention_mode)  # (B, T, C) -> (B, T, C)
         return self.f_head(self.ln(x))  # (B, T, vocab_size)

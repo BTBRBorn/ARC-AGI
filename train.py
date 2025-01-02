@@ -11,7 +11,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-2)
-parser.add_argument("--vocab_size", type=int, default=32)
+parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=7500)
 parser.add_argument("--test_block_size", type=int, default=2056)
 parser.add_argument("--n_layer", type=int, default=2)
@@ -21,6 +21,7 @@ parser.add_argument("--n_head", type=int, default=2)
 parser.add_argument("--data_path", type=str, default="data/training")
 parser.add_argument("--dl_num_workers", type=int, default=2)
 parser.add_argument("--compile_model", type=int, default=1)
+parser.add_argument("--attention_mode", type=str, default="flash_attention")
 
 args = parser.parse_args()
 
@@ -48,6 +49,7 @@ class Config:
     device: str = device
     dl_num_workers: int = args.dl_num_workers
     compile_model: int = args.compile_model
+    attention_mode: str = args.attention_mode
 
 
 config = Config()
@@ -69,7 +71,7 @@ optim_groups = [
     {"params": no_decay_params, "weight_decay": 0.0},
 ]
 
-optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate)
+optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1)
 
 tokenizer = Tokenizer(config.vocab_size)

@@ -12,7 +12,7 @@ def train_step(model, dataloader, optimizer, config):
         B, T = x.size()
         optimizer.zero_grad()
         with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
-            logits = model(x)
+            logits = model(x, config.attention_mode)
             loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
         total_loss += loss.item()
         loss.backward()
@@ -30,7 +30,7 @@ def val_step(model, dataloader, config):
             x, y = x.to(config.device), y.to(config.device)
             B, T = x.size()
             with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
-                logits = model(x)
+                logits = model(x, config.attention_mode)
                 loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
             total_loss += loss.item()
 

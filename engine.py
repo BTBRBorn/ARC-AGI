@@ -51,14 +51,13 @@ def val_step(model, dataloader, config):
     return total_loss / len(dataloader)
 
 
-def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config):
+def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config, args, results):
     total_tokens = (
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
     )
 
-    results = {"train_losses": [], "val_losses": []}
-    for epoch in tqdm(range(config.num_epochs)):
+    for epoch in tqdm(range(args.num_epochs)):
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)

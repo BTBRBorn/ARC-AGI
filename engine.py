@@ -14,7 +14,9 @@ def train_step(model, dataloader, optimizer, config):
         if config.use_mixed_precision:
             with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
                 logits = model(x, config.attention_mode)
-                loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+                loss = F.cross_entropy(
+                    logits.view(B * T, config.vocab_size), y.view(B * T)
+                )
         else:
             logits = model(x, config.attention_mode)
             loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
@@ -36,10 +38,14 @@ def val_step(model, dataloader, config):
             if config.use_mixed_precision:
                 with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
                     logits = model(x, config.attention_mode)
-                    loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+                    loss = F.cross_entropy(
+                        logits.view(B * T, config.vocab_size), y.view(B * T)
+                    )
             else:
                 logits = model(x, config.attention_mode)
-                loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+                loss = F.cross_entropy(
+                    logits.view(B * T, config.vocab_size), y.view(B * T)
+                )
             total_loss += loss.item()
 
     return total_loss / len(dataloader)
@@ -50,6 +56,8 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config)
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
     )
+
+    results = {"train_losses": [], "val_losses": []}
     for epoch in tqdm(range(config.num_epochs)):
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
@@ -58,7 +66,10 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config)
         lr = scheduler.get_last_lr()
         end = time.time()
         token_per_sec = total_tokens / (end - start)
+        results['train_losses'].append(train_loss)
+        results['val_losses'].append(val_loss)
         print(
-            f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, " + \
-            f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"
+            f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
+            + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"
         )
+    return results

@@ -79,4 +79,5 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1)
 tokenizer = Tokenizer(config.vocab_size)
 train_dataloader, val_dataloader = get_dataloaders.create_dataloaders(config, tokenizer)
 
-engine.train(gpt, train_dataloader, val_dataloader, optimizer, scheduler, config)
+results = engine.train(gpt, train_dataloader, val_dataloader, optimizer, scheduler, config)
+print(results)

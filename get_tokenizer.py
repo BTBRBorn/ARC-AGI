@@ -39,11 +39,12 @@ class Tokenizer:
                 for e in array
             ]
         )
-        assert (
-            len(data) <= block_size
-        ), f"Data length ({len(data)}) can't be bigger than block_size ({block_size})"
-        # + 1 is needed because buffer size needs to be block_size + 1
-        data = data + [self.special_tokens["fill_value"]] * (block_size - len(data) + 1)
+        if block_size is not None:
+            assert (
+                len(data) <= block_size
+            ), f"Data length ({len(data)}) can't be bigger than block_size ({block_size})"
+            # + 1 is needed because buffer size needs to be block_size + 1
+            data = data + [self.special_tokens["fill_value"]] * (block_size - len(data) + 1)
 
         return data
 

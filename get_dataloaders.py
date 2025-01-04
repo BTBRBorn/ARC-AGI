@@ -41,12 +41,12 @@ def create_dataloaders(config, tokenizer):
         train_dataset,
         config.batch_size,
         shuffle=True,
-        num_workers=config.dl_num_workers,
+        num_workers=config.dataloader_num_workers,
     )
     val_dataloader = DataLoader(
         val_dataset,
         config.batch_size,
         shuffle=False,
-        num_workers=config.dl_num_workers,
+        num_workers=config.dataloader_num_workers,
     )
     return train_dataloader, val_dataloader

@@ -129,7 +129,7 @@ class GPT(nn.Module):
             std = self.config.emb_dim ** (-0.5)
             nn.init.normal_(module.weight, mean=0, std=std)
 
-    def forward(self, x: torch.Tensor, attention_mode):
+    def forward(self, x: torch.Tensor, attention_mode='flash_attention'):
         B, T = x.size()
         x = self.wte(x) + self.pte(self.pos_inx[:T])  # (B, T, C) + (T, C) -> (B, T, C)
         for block in self.blocks:

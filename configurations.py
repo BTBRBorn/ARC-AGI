@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 class Config:
     def __init__(self, args, device):
         self.num_epochs: int = args.num_epochs
@@ -18,3 +19,10 @@ class Config:
         self.compile_model: int = args.compile_model
         self.attention_mode: str = args.attention_mode
         self.use_mixed_precision: int = args.use_mixed_precision
+
+    def __str__(self):
+        arg_list = [
+            f"{k}='{v}'" if isinstance(v, str) else f"{k}={v}"
+            for k, v in vars(self).items()
+        ]
+        return f'Config({', '.join(arg_list)})'

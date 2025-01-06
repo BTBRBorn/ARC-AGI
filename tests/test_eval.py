@@ -26,7 +26,7 @@ def data():
 
 @pytest.fixture
 def evaluator():
-    evaluator = Evaluator(Path('checkpoints/checkpoint_1.tar'), Path('data/training'))
+    evaluator = Evaluator(Path('checkpoints/test_model.tar'), Path('data/training'))
     return evaluator
 
 def test_create_context(evaluator, data):

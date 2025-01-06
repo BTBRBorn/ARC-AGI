@@ -15,10 +15,10 @@ parser.add_argument("--learning_rate", type=float, default=1e-2)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=7500)
 parser.add_argument("--test_block_size", type=int, default=2056)
-parser.add_argument("--n_layer", type=int, default=2)
+parser.add_argument("--n_layer", type=int, default=16)
 parser.add_argument("--batch_size", type=int, default=4)
-parser.add_argument("--head_size", type=int, default=2)
-parser.add_argument("--n_head", type=int, default=2)
+parser.add_argument("--head_size", type=int, default=8)
+parser.add_argument("--n_head", type=int, default=4)
 parser.add_argument("--data_path", type=str, default="data/training")
 parser.add_argument("--dataloader_num_workers", type=int, default=2)
 parser.add_argument("--compile_model", type=int, choices={0, 1}, default=0)
@@ -59,7 +59,7 @@ else:
 
     optimizer = torch.optim.Adam(gpt.parameters(), lr=config.learning_rate, fused=True)
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5)
 
     tokenizer = Tokenizer(config.vocab_size)
 

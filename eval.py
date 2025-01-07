@@ -19,7 +19,7 @@ class Evaluator:
             {"input": task["test"][test_index]["input"], "output": [[]]}
         )
         new_task["context"].append(test_input)
-        tokens = tokenizer.encode(new_task["context"], block_size=None)
+        tokens = tokenizer.encode(new_task["context"])
         return tokens[:-1]
 
     def _generate_solution(self, model, task, test_index, threshold=500):
@@ -34,6 +34,7 @@ class Evaluator:
                 next_token = -1
                 while tokenizer.special_tokens["end_of_output"] != next_token and counter <= threshold:
                     counter += 1
+                    context = context[:, -config.block_size:]
                     logits = model(context)
                     next_token = torch.argmax(logits[:, -1, :])
                     context = torch.cat((context, next_token.view(1, -1)), dim=-1)
@@ -41,7 +42,10 @@ class Evaluator:
                 tokens = context.view(-1).tolist()
         if counter > threshold:
             return None
-        return tokenizer.decode(tokens)[-1]['output']
+        try:
+            return tokenizer.decode(tokens)[-1]['output']
+        except:
+            return None
 
     def _check_solution(self, output, solution):
         if solution is None:

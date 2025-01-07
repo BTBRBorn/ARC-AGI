@@ -6,7 +6,7 @@ class Tokenizer:
             "start_of_output": None,
             "end_of_output": None,
             "row_indicator": None,
-            "fill_value": None,
+            "context_indicator": None,
         }
 
         last_token = vocab_size - len(self.special_tokens)
@@ -27,7 +27,7 @@ class Tokenizer:
                 flat_l.extend(e)
         return flat_l
 
-    def encode(self, array, block_size):
+    def encode(self, array):
         data = self._flatten(
             [
                 [self.special_tokens["start_of_input"]]
@@ -39,12 +39,8 @@ class Tokenizer:
                 for e in array
             ]
         )
-        if block_size is not None:
-            assert (
-                len(data) <= block_size
-            ), f"Data length ({len(data)}) can't be bigger than block_size ({block_size})"
-            # + 1 is needed because buffer size needs to be block_size + 1
-            data = data + [self.special_tokens["fill_value"]] * (block_size - len(data) + 1)
+
+        data = [self.special_tokens['context_indicator']] + data
 
         return data
 
@@ -68,7 +64,7 @@ class Tokenizer:
             elif token == self.special_tokens["row_indicator"]:
                 example[context].append(row)
                 row = []
-            elif token == self.special_tokens["fill_value"]:
+            elif token == self.special_tokens["context_indicator"]:
                 continue
             else:
                 row.append(token)

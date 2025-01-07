@@ -1,46 +1,38 @@
 from torch.utils.data import Dataset, DataLoader
-import os
-import json
 from pathlib import Path
 import torch
-from get_augmentor import Augmentor
+import numpy as np
+
 
 class CustomDataset(Dataset):
-    def __init__(self, config, tokenizer, is_train):
-        self.data_path = Path(config.data_path)
-        self.files = os.listdir(config.data_path)
-        self.tokenizer = tokenizer
-        self.is_train = is_train
-        self.augmentor = Augmentor(config.vocab_size, tokenizer.special_tokens)
-        self.block_size = config.block_size if is_train else config.test_block_size
+    def __init__(self, data_path, block_size):
+        #mmap_mode has to be "r" without this augmentors color changes
+        #would not be applied.
+        self.data = np.load(Path(data_path), mmap_mode="r")
+        self.buffer_size = block_size + 1
 
     def __len__(self):
-        return len(self.files)
+        if len(self.data) % self.buffer_size:
+            return (len(self.data) // self.buffer_size) + 1
+        else:
+            return len(self.data) // self.buffer_size
 
     def __getitem__(self, index):
-        file = self.files[index]
-        json_path = self.data_path / file
-        with open(json_path, "r") as fhandle:
-            task = json.load(fhandle)
-        if self.is_train:
-            task = task['train']
-            self.augmentor.apply(task) #In-place change
-        else:
-            task = task['test'] 
-
-        task = self.tokenizer.encode(task, self.block_size)
-        buff = torch.tensor(task, dtype=torch.long)
+        buff = self.data[index * self.buffer_size : (index + 1) * self.buffer_size]
+        if len(buff) != self.buffer_size:
+            buff = self.data[-self.buffer_size :]
+        buff = torch.tensor(buff, dtype=torch.long)
         x, y = buff[:-1], buff[1:]
         return x, y
 
 
-def create_dataloaders(config, tokenizer):
-    train_dataset = CustomDataset(config, tokenizer, is_train=True)
-    val_dataset = CustomDataset(config, tokenizer, is_train=False)
+def create_dataloaders(config, train_shuffle=True):
+    train_dataset = CustomDataset("data/pretraining/training.npy", config.block_size)
+    val_dataset = CustomDataset("data/pretraining/validation.npy", config.block_size)
     train_dataloader = DataLoader(
         train_dataset,
         config.batch_size,
-        shuffle=True,
+        shuffle=train_shuffle,
         num_workers=config.dataloader_num_workers,
     )
     val_dataloader = DataLoader(

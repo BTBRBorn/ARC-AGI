@@ -52,6 +52,7 @@ def test_encode(data, tokenizer):
 
     train_data = (
         [
+            special_tokens["context_indicator"],
             special_tokens["start_of_input"],
             1,
             0,
@@ -80,14 +81,12 @@ def test_encode(data, tokenizer):
             1,
             1,
             special_tokens["end_of_output"],
-            special_tokens["fill_value"],
-            special_tokens["fill_value"],
-            special_tokens["fill_value"],
         ]
     )
 
     test_data = (
         [
+            special_tokens["context_indicator"],
             special_tokens["start_of_input"],
             1,
             0,
@@ -116,18 +115,15 @@ def test_encode(data, tokenizer):
             1,
             7,
             special_tokens["end_of_output"],
-            special_tokens["fill_value"],
-            special_tokens["fill_value"],
-            special_tokens["fill_value"],
         ]
     )
 
-    assert train_data == tokenizer.encode(data["train"], block_size=30)
-    assert test_data == tokenizer.encode(data["test"], block_size=30)
+    assert train_data == tokenizer.encode(data["train"])
+    assert test_data == tokenizer.encode(data["test"])
     
 def test_decode(tokenizer, data):
-    train_tokens = tokenizer.encode(data["train"], block_size=64)
-    test_tokens = tokenizer.encode(data["test"], block_size=64)
+    train_tokens = tokenizer.encode(data["train"])
+    test_tokens = tokenizer.encode(data["test"])
     assert tokenizer.decode(train_tokens) == data["train"]
     assert tokenizer.decode(test_tokens) == data["test"]
 

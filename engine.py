@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import time
+from utils import create_data
 
 
 def train_step(model, dataloader, optimizer, config):
@@ -51,13 +52,26 @@ def val_step(model, dataloader, config):
     return total_loss / len(dataloader)
 
 
-def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config, args, results):
+def train(
+    model,
+    train_dataloader,
+    val_dataloader,
+    optimizer,
+    scheduler,
+    tokenizer,
+    config,
+    args,
+    results,
+):
     total_tokens = (
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
     )
-
+    # Create the validation data
+    create_data(config, tokenizer, is_train=False, save_folder="data/pretraining")
     for epoch in tqdm(range(args.num_epochs)):
+        # Create the training data
+        create_data(config, tokenizer, is_train=True, save_folder="data/pretraining")
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)
@@ -65,8 +79,8 @@ def train(model, train_dataloader, val_dataloader, optimizer, scheduler, config,
         lr = scheduler.get_last_lr()
         end = time.time()
         token_per_sec = total_tokens / (end - start)
-        results['train_losses'].append(train_loss)
-        results['val_losses'].append(val_loss)
+        results["train_losses"].append(train_loss)
+        results["val_losses"].append(val_loss)
         print(
             f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
             + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"

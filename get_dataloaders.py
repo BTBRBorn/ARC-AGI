@@ -9,18 +9,18 @@ class CustomDataset(Dataset):
         #mmap_mode has to be "r" without this augmentors color changes
         #would not be applied.
         self.data = np.load(Path(data_path), mmap_mode="r")
-        self.buffer_size = block_size + 1
+        self.block_size = block_size 
 
     def __len__(self):
-        if len(self.data) % self.buffer_size:
-            return (len(self.data) // self.buffer_size) + 1
+        if len(self.data) % self.block_size:
+            return (len(self.data) // self.block_size) + 1
         else:
-            return len(self.data) // self.buffer_size
+            return len(self.data) // self.block_size
 
     def __getitem__(self, index):
-        buff = self.data[index * self.buffer_size : (index + 1) * self.buffer_size]
-        if len(buff) != self.buffer_size:
-            buff = self.data[-self.buffer_size :]
+        buff = self.data[index * self.block_size : (index + 1) * self.block_size + 1]
+        if len(buff) != self.block_size + 1:
+            buff = self.data[-self.block_size - 1:]
         buff = torch.tensor(buff, dtype=torch.long)
         x, y = buff[:-1], buff[1:]
         return x, y

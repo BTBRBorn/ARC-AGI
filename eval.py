@@ -42,10 +42,11 @@ class Evaluator:
                 tokens = context.view(-1).tolist()
         if counter > threshold:
             return None
-        try:
-            return tokenizer.decode(tokens)[-1]['output']
-        except:
-            return None
+        for idx, token in enumerate(tokens[::-1], start=1):
+            if token == tokenizer.special_tokens["start_of_output"]:
+                output_index = idx
+                break
+        return tokenizer.decode(tokens[-output_index:])[0]['output']
 
     def _check_solution(self, output, solution):
         if solution is None:
@@ -76,10 +77,10 @@ class Evaluator:
                   #      + f"pixel accuracy: {pixel_acc[-1]}"
                     )
 
-        overall_acc = sum(task_acc) / len(task_acc)
-        overall_pixel_acc = sum(pixel_acc) / len(pixel_acc)
+        overall_acc = (sum(task_acc) / len(task_acc))*100
+        #overall_pixel_acc = sum(pixel_acc) / len(pixel_acc)
 
         print(
             f"Overall accuracy: {overall_acc},"
-            + f"Overall pixel accuracy: {overall_pixel_acc}"
+            #+ f"Overall pixel accuracy: {overall_pixel_acc}"
         )

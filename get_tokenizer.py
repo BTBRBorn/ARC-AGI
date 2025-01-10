@@ -55,7 +55,10 @@ class Tokenizer:
             elif token == self.special_tokens["end_of_input"]:
                 example["input"].append(row)
             elif token == self.special_tokens["start_of_output"]:
-                example["output"] = []
+                try:
+                    example["output"] = []
+                except UnboundLocalError:
+                    example = {"output": []}
                 row = []
                 context = "output"
             elif token == self.special_tokens["end_of_output"]:

@@ -11,9 +11,9 @@ from configurations import Config
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
-parser.add_argument("--learning_rate", type=float, default=1e-3)
+parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--block_size", type=int, default=1024)
+parser.add_argument("--block_size", type=int, default=256)
 parser.add_argument("--n_layer", type=int, default=12)
 parser.add_argument("--batch_size", type=int, default=8)
 parser.add_argument("--head_size", type=int, default=8)

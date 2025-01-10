@@ -24,4 +24,4 @@ class Config:
             f"{k}='{v}'" if isinstance(v, str) else f"{k}={v}"
             for k, v in vars(self).items()
         ]
-        return f'Config({', '.join(arg_list)})'
+        return f"Config({', '.join(arg_list)})"

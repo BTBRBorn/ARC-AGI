@@ -5,7 +5,7 @@ class Augmentor:
 
         self.special_tokens = special_tokens
         self.colors = list(
-            set(range(1, vocab_size)) - set(self.special_tokens.values())
+            set(range(0, vocab_size)) - set(self.special_tokens.values())
         )
 
     def _flatten(self, array):
@@ -16,7 +16,7 @@ class Augmentor:
 
     def _get_mappings(self, example):
         flattened = self._flatten(example["input"]) + self._flatten(example["output"])
-        color_set = set(flattened).difference({0})
+        color_set = set(flattened)#.difference({0})
         mappings = {}
         copy_colors = list(self.colors)
         for c in color_set:
@@ -29,8 +29,8 @@ class Augmentor:
         n_rows, n_columns = len(array), len(array[0])
         for i in range(n_rows):
             for j in range(n_columns):
-                if array[i][j] != 0:
-                    array[i][j] = mappings[array[i][j]]
+                #if array[i][j] != 0:
+                array[i][j] = mappings[array[i][j]]
 
     def _change_one_example(self, example):
         mappings = self._get_mappings(example)

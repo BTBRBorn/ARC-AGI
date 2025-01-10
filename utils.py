@@ -5,6 +5,7 @@ import os
 import numpy as np
 import json
 from get_augmentor import Augmentor
+import random
 
 
 def save_checkpoint(
@@ -57,7 +58,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     return return_dict
 
-def create_data(config, tokenizer, is_train, save_folder="data/pretraining"):
+def create_data(config, tokenizer, is_train, save_folder="data/pretraining", rolled=True):
     data_path = Path(config.data_path)
     filelist = os.listdir(data_path)
     augmentor = Augmentor(config.vocab_size, tokenizer.special_tokens)
@@ -78,6 +79,9 @@ def create_data(config, tokenizer, is_train, save_folder="data/pretraining"):
     save_folder = Path(save_folder)
     if not save_folder.exists():
         save_folder.mkdir(parents=True)
+
+    if rolled and is_train: 
+        data = np.roll(data, shift=random.randint(0, 50000))
     if is_train:
         np.save(save_folder / "training.npy", data)
     else:

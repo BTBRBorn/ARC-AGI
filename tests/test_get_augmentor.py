@@ -35,11 +35,11 @@ def test_flatten(augmentor):
 
 
 def test_get_mappings(augmentor, data):
-    with mock.patch("random.choice", side_effect= [10, 11, 12, 13, 14]):
+    with mock.patch("random.choice", side_effect= [10, 11, 12, 13, 14, 15]):
         mappings_1 = augmentor._get_mappings(data["train"][0])
         mappings_2 = augmentor._get_mappings(data["train"][1])
-    assert mappings_1 == {1: 10}
-    assert mappings_2 == {1: 12, 8: 11, 2: 13, 4: 14}
+    assert mappings_1 == {0: 10, 1: 11}
+    assert mappings_2 == {1: 13, 8: 12, 2: 14, 4: 15}
 
 
 def test_change_array(augmentor, data):
@@ -64,10 +64,10 @@ def test_change_colors(augmentor, data):
     task = data["train"]
     with mock.patch(
         "get_augmentor.Augmentor._get_mappings",
-        return_value={1: 11, 2: 12, 4: 13, 7: 13, 8: 15},
+        return_value={1: 11, 2: 12, 4: 13, 7: 13, 8: 15, 0:16},
     ):
         augmentor._change_colors(task)
     assert task == [
-        {"input": [[11, 0], [0, 11]], "output": [[0, 11], [11, 11]]},
+        {"input": [[11, 16], [16, 11]], "output": [[16, 11], [11, 11]]},
         {"input": [[11, 11], [15, 12]], "output": [[13, 11], [11, 11]]},
     ]

@@ -6,6 +6,7 @@ import numpy as np
 import json
 from get_augmentor import Augmentor
 import random
+import matplotlib.pyplot as plt
 
 
 def save_checkpoint(
@@ -37,7 +38,17 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     gpt.load_state_dict(checkpoint["model_state_dict"])
 
-    optimizer = torch.optim.Adam(gpt.parameters())
+    optim_groups = [
+        {
+            "params": [param for param in gpt.parameters() if param.dim() >= 2],
+            "weight_decay": 1.0,
+        },
+        {
+            "params": [param for param in gpt.parameters() if param.dim() < 2],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True)
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
@@ -58,7 +69,10 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     return return_dict
 
-def create_data(config, tokenizer, is_train, save_folder="data/pretraining", rolled=True):
+
+def create_data(
+    config, tokenizer, is_train, save_folder="data/pretraining", rolled=True
+):
     data_path = Path(config.data_path)
     filelist = os.listdir(data_path)
     augmentor = Augmentor(config.vocab_size, tokenizer.special_tokens)
@@ -80,9 +94,18 @@ def create_data(config, tokenizer, is_train, save_folder="data/pretraining", rol
     if not save_folder.exists():
         save_folder.mkdir(parents=True)
 
-    if rolled and is_train: 
+    if rolled and is_train:
         data = np.roll(data, shift=random.randint(0, 50000))
     if is_train:
         np.save(save_folder / "training.npy", data)
     else:
         np.save(save_folder / "validation.npy", data)
+
+def plot_losses(results):
+    train_loss, val_loss = results['train_losses'], results['val_losses']
+    plt.plot(range(1, len(train_loss)+1), train_loss, label='training', color='green')
+    plt.plot(range(1, len(val_loss)+1), val_loss, label='validation', color='red')
+    plt.title('Train and Validation Losses vs Num Epochs')
+    plt.xlabel('Num Epochs')
+    plt.ylabel('Loss')
+    plt.legend(loc='best')

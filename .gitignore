@@ -14,6 +14,7 @@ wheels/
 data/*/
 playground.ipynb
 checkpoints/
+test_checkpoints/
 
 #uv specific
 uv.lock

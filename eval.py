@@ -22,9 +22,9 @@ class Evaluator:
         tokens = tokenizer.encode(new_task["context"])
         return tokens[:-1]
 
-    def _generate_solution(self, model, task, test_index, threshold=500):
+    def _generate_solution(self, model, task, test_index, threshold=2500):
         tokenizer = self.checkpoint["tokenizer"]
-        config = self.checkpoint['config']
+        config = self.checkpoint["config"]
         context = self._create_context(task, test_index, tokenizer)
         context = torch.tensor(context, device=config.device).view(1, -1)
         model.eval()
@@ -32,9 +32,12 @@ class Evaluator:
         with torch.inference_mode():
             with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
                 next_token = -1
-                while tokenizer.special_tokens["end_of_output"] != next_token and counter <= threshold:
+                while (
+                    tokenizer.special_tokens["end_of_output"] != next_token
+                    and counter <= threshold
+                ):
                     counter += 1
-                    context = context[:, -config.block_size:]
+                    context = context[:, -config.block_size :]
                     logits = model(context)
                     next_token = torch.argmax(logits[:, -1, :])
                     context = torch.cat((context, next_token.view(1, -1)), dim=-1)
@@ -46,18 +49,35 @@ class Evaluator:
             if token == tokenizer.special_tokens["start_of_output"]:
                 output_index = idx
                 break
-        return tokenizer.decode(tokens[-output_index:])[0]['output']
+        return tokenizer.decode(tokens[-output_index:])[0]["output"]
 
     def _check_solution(self, output, solution):
         if solution is None:
             return False
         return output == solution
 
+    def _is_2d_array(self, array):
+        lengths = set([len(e) for e in array])
+        return len(lengths) == 1
+
     def _check_pixel_values(self, output, solution):
-        pass
+        if solution is None:
+            return 0.0
+        if self._is_2d_array(solution) and (
+            len(output) == len(solution) and len(output[0]) == len(solution[0])
+        ):
+            total_pixels = len(output) * len(output[0])
+            matched_pixels = 0
+            for i in range(len(output)):
+                for j in range(len(output[0])):
+                    if output[i][j] == solution[i][j]:
+                        matched_pixels += 1
+            return matched_pixels / total_pixels
+        else:
+            return 0.0
 
     def evaluate(self, verbose=False):
-        model = self.checkpoint['model']
+        model = self.checkpoint["model"]
         task_paths = [
             self.path_to_tasks / file for file in os.listdir(self.path_to_tasks)
         ]
@@ -70,17 +90,17 @@ class Evaluator:
                 output = task["test"][tx]["output"]
                 solution = self._generate_solution(model, task, tx)
                 task_acc.append(self._check_solution(output, solution))
-                #pixel_acc.append(self._check_pixel_values(output, solution))
+                pixel_acc.append(self._check_pixel_values(output, solution))
                 if verbose:
                     print(
-                        f"Task {task_path} test {tx+1}: task solved: {task_acc[-1]}"
-                  #      + f"pixel accuracy: {pixel_acc[-1]}"
+                        f"Task {task_path} test {tx + 1}: task solved: {task_acc[-1]}, "
+                        + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-        overall_acc = (sum(task_acc) / len(task_acc))*100
-        #overall_pixel_acc = sum(pixel_acc) / len(pixel_acc)
+        overall_acc = (sum(task_acc) / len(task_acc)) * 100
+        overall_pixel_acc = sum(pixel_acc) / len(pixel_acc) * 100
 
         print(
-            f"Overall accuracy: {overall_acc},"
-            #+ f"Overall pixel accuracy: {overall_pixel_acc}"
+            f"Overall accuracy: {overall_acc:.2f}%, "
+            + f"Overall pixel accuracy: {overall_pixel_acc:.2f}%"
         )

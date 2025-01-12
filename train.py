@@ -13,11 +13,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--block_size", type=int, default=256)
-parser.add_argument("--n_layer", type=int, default=12)
+parser.add_argument("--block_size", type=int, default=1024)
+parser.add_argument("--n_layer", type=int, default=16)
 parser.add_argument("--batch_size", type=int, default=8)
-parser.add_argument("--head_size", type=int, default=8)
-parser.add_argument("--n_head", type=int, default=8)
+parser.add_argument("--head_size", type=int, default=64)
+parser.add_argument("--n_head", type=int, default=4)
 parser.add_argument("--data_path", type=str, default="data/training")
 parser.add_argument("--dataloader_num_workers", type=int, default=2)
 parser.add_argument("--compile_model", type=int, choices={0, 1}, default=0)
@@ -56,9 +56,21 @@ else:
 
     gpt = model.GPT(config=config).to(config.device)
 
-    optimizer = torch.optim.Adam(gpt.parameters(), lr=config.learning_rate, fused=True)
+    optim_groups = [
+        {
+            "params": [param for param in gpt.parameters() if param.dim() >= 2],
+            "weight_decay": 1.0,
+        },
+        {
+            "params": [param for param in gpt.parameters() if param.dim() < 2],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True)
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, min_lr=1e-7)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=0.1, min_lr=1e-7, patience=30
+    )
 
     tokenizer = Tokenizer(config.vocab_size)
 
@@ -96,3 +108,5 @@ if args.checkpoint_save_path:
         config=config,
         results=results,
     )
+
+utils.plot_losses(results)

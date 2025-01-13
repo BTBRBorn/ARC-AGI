@@ -71,7 +71,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
 
 def create_data(
-    config, tokenizer, is_train, save_folder="pretraining/", rolled=True
+    config, tokenizer, save_folder="pretraining/", is_train=True, rolled=True, augmented=True
 ):
     data_path = Path(config.data_path)
     filelist = os.listdir(data_path)
@@ -83,9 +83,10 @@ def create_data(
             task = json.load(fhandle)
         if is_train:
             task = task["train"]
-            augmentor.apply(task)  # In-place change
         else:
             task = task["test"]
+        if augmented:
+            augmentor.apply(task)  # In-place change
         task = tokenizer.encode(task)
         np_task = np.array(task, dtype=np.uint8)
         data.append(np_task)
@@ -95,8 +96,9 @@ def create_data(
     if not save_folder.exists():
         save_folder.mkdir(parents=True)
 
-    if rolled and is_train:
+    if rolled:
         data = np.roll(data, shift=random.randint(0, 50000))
+
     if is_train:
         np.save(save_folder / "training.npy", data)
     else:

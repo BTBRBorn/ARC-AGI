@@ -66,7 +66,9 @@ else:
             "weight_decay": 0.0,
         },
     ]
-    optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True, betas=(0.9, 0.95))
+    optimizer = torch.optim.AdamW(
+        optim_groups, lr=config.learning_rate, fused=True, betas=(0.9, 0.95)
+    )
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, factor=0.1, min_lr=1e-7, patience=10
@@ -86,6 +88,24 @@ print(f"Total number of parameters: {sum(p.numel() for p in gpt.parameters())}")
 if config.compile_model:
     gpt = torch.compile(gpt)
 
+# Create the training data
+utils.create_data(
+    config=config,
+    tokenizer=tokenizer,
+    save_folder="pretraining/",
+    is_train=True,
+    rolled=True,
+    augmented=True,
+)
+# Create the validation data
+utils.create_data(
+    config=config,
+    tokenizer=tokenizer,
+    save_folder="pretraining/",
+    is_train=False,
+    rolled=False,
+    augmented=False,
+)
 train_dataloader, val_dataloader = get_dataloaders.create_dataloaders(config)
 
 results = engine.train(

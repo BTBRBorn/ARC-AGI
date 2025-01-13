@@ -67,11 +67,17 @@ def train(
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
     )
-    # Create the validation data
-    create_data(config, tokenizer, is_train=False, save_folder="pretraining/")
+
     for epoch in tqdm(range(args.num_epochs)):
-        # Create the training data
-        create_data(config, tokenizer, is_train=True, save_folder="pretraining/")
+        # Change the training data
+        create_data(
+            config=config,
+            tokenizer=tokenizer,
+            save_folder="pretraining/",
+            is_train=True,
+            rolled=True,
+            augmented=True,
+        )
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)
@@ -82,7 +88,7 @@ def train(
         results["train_losses"].append(train_loss)
         results["val_losses"].append(val_loss)
         print(
-            f"Epoch: {epoch+1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
+            f"Epoch: {epoch + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
             + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"
         )
     return results

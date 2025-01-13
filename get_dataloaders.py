@@ -27,8 +27,8 @@ class CustomDataset(Dataset):
 
 
 def create_dataloaders(config, train_shuffle=True):
-    train_dataset = CustomDataset("data/pretraining/training.npy", config.block_size)
-    val_dataset = CustomDataset("data/pretraining/validation.npy", config.block_size)
+    train_dataset = CustomDataset(config.data_path.parent / "pretraining/training.npy", config.block_size)
+    val_dataset = CustomDataset(config.data_path.parent / "pretraining/validation.npy", config.block_size)
     train_dataloader = DataLoader(
         train_dataset,
         config.batch_size,

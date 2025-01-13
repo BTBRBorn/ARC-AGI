@@ -71,7 +71,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
 
 def create_data(
-    config, tokenizer, is_train, save_folder="data/pretraining", rolled=True
+    config, tokenizer, is_train, save_folder="pretraining/", rolled=True
 ):
     data_path = Path(config.data_path)
     filelist = os.listdir(data_path)
@@ -90,7 +90,8 @@ def create_data(
         np_task = np.array(task, dtype=np.uint8)
         data.append(np_task)
     data = np.concatenate(data)
-    save_folder = Path(save_folder)
+
+    save_folder = data_path.parent / save_folder
     if not save_folder.exists():
         save_folder.mkdir(parents=True)
 

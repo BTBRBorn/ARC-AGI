@@ -68,10 +68,10 @@ def train(
         + len(val_dataloader) * config.batch_size * config.block_size
     )
     # Create the validation data
-    create_data(config, tokenizer, is_train=False, save_folder="data/pretraining")
+    create_data(config, tokenizer, is_train=False, save_folder="pretraining/")
     for epoch in tqdm(range(args.num_epochs)):
         # Create the training data
-        create_data(config, tokenizer, is_train=True, save_folder="data/pretraining")
+        create_data(config, tokenizer, is_train=True, save_folder="pretraining/")
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)

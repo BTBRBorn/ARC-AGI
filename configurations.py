@@ -18,6 +18,8 @@ class Config:
         self.compile_model: int = args.compile_model
         self.attention_mode: str = args.attention_mode
         self.use_mixed_precision: int = args.use_mixed_precision
+        self.scheduler_iter: int = args.scheduler_iter
+        self.weight_decay: float = args.weight_decay
 
     def __str__(self):
         arg_list = [

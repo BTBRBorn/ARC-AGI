@@ -7,6 +7,7 @@ from utils import create_data
 
 def train_step(model, dataloader, optimizer, config):
     total_loss = 0.0
+    total_norm = 0.0
     model.train()
     for x, y in dataloader:
         x, y = x.to(config.device), y.to(config.device)
@@ -24,9 +25,10 @@ def train_step(model, dataloader, optimizer, config):
         total_loss += loss.item()
         loss.backward()
         norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        total_norm += norm.item()
         optimizer.step()
 
-    return total_loss / len(dataloader), norm
+    return total_loss / len(dataloader), total_norm / len(dataloader)
 
 
 def val_step(model, dataloader, config):
@@ -81,7 +83,7 @@ def train(
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)
-        scheduler.step(train_loss)
+        scheduler.step()
         lr = scheduler.get_last_lr()
         end = time.time()
         token_per_sec = total_tokens / (end - start)
@@ -89,6 +91,6 @@ def train(
         results["val_losses"].append(val_loss)
         print(
             f"Epoch: {epoch + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
-            + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr}"
+            + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
         )
     return results

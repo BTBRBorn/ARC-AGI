@@ -4,6 +4,7 @@ from utils import load_checkpoint
 import os
 from pathlib import Path
 import json
+import argparse
 
 
 class Evaluator:
@@ -104,3 +105,15 @@ class Evaluator:
             f"Overall accuracy: {overall_acc:.2f}%, "
             + f"Overall pixel accuracy: {overall_pixel_acc:.2f}%"
         )
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--checkpoint_path', type=str)
+    parser.add_argument('--tasks_path', type=str)
+    parser.add_argument('--verbose', type=int, choices={0,1}, default=1)
+
+    args = parser.parse_args()
+
+    evaluator = Evaluator(args.checkpoint_path, args.tasks_path)
+    evaluator.evaluate(verbose=bool(args.verbose))

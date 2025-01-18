@@ -62,7 +62,7 @@ def train(
     scheduler,
     tokenizer,
     config,
-    args,
+    num_epochs,
     results,
 ):
     total_tokens = (
@@ -70,7 +70,9 @@ def train(
         + len(val_dataloader) * config.batch_size * config.block_size
     )
 
-    for epoch in tqdm(range(args.num_epochs)):
+    val_loss = val_step(model, val_dataloader, config)
+    print(f'Starting validation loss: {val_loss:.4f}')
+    for epoch in tqdm(range(num_epochs)):
         # Change the training data
         create_data(
             data_path=config.data_path_train,

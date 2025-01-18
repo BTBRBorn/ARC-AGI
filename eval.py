@@ -21,12 +21,12 @@ class Evaluator:
         )
         new_task["context"].append(test_input)
         tokens = tokenizer.encode(new_task["context"])
-        return tokens[:-1]
+        return tokens[:-1], len(tokens[:-1])
 
     def _generate_solution(self, model, task, test_index, threshold=2500):
         tokenizer = self.checkpoint["tokenizer"]
         config = self.checkpoint["config"]
-        context = self._create_context(task, test_index, tokenizer)
+        context, con_len = self._create_context(task, test_index, tokenizer)
         context = torch.tensor(context, device=config.device).view(1, -1)
         model.eval()
         counter = 0
@@ -50,7 +50,7 @@ class Evaluator:
             if token == tokenizer.special_tokens["start_of_output"]:
                 output_index = idx
                 break
-        return tokenizer.decode(tokens[-output_index:])[0]["output"]
+        return tokenizer.decode(tokens[-output_index:])[0]["output"], con_len
 
     def _check_solution(self, output, solution):
         if solution is None:
@@ -90,12 +90,14 @@ class Evaluator:
 
             for tx in range(len(task["test"])):
                 output = task["test"][tx]["output"]
-                solution = self._generate_solution(model, task, tx)
+                ###finetune should be done here###
+                solution, con_len = self._generate_solution(model, task, tx)
                 task_acc.append(self._check_solution(output, solution))
                 pixel_acc.append(self._check_pixel_values(output, solution))
                 if verbose:
                     print(
-                        f"Task {task_number}/{total_tasks} test {tx + 1}: task solved: {task_acc[-1]}, "
+                        f"Task {task_number!s:>3s}/{total_tasks} test {tx + 1}, " 
+                        + f"context length: {con_len!s:>4s}, task solved: {task_acc[-1]}, "
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
@@ -107,12 +109,13 @@ class Evaluator:
             + f"Overall pixel accuracy: {overall_pixel_acc:.2f}%"
         )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--checkpoint_path', type=str)
-    parser.add_argument('--tasks_path', type=str)
-    parser.add_argument('--verbose', type=int, choices={0,1}, default=1)
+    parser.add_argument("--checkpoint_path", type=str)
+    parser.add_argument("--tasks_path", type=str)
+    parser.add_argument("--verbose", type=int, choices={0, 1}, default=1)
 
     args = parser.parse_args()
 

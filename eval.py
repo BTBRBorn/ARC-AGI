@@ -83,7 +83,8 @@ class Evaluator:
             self.path_to_tasks / file for file in os.listdir(self.path_to_tasks)
         ]
         task_acc, pixel_acc = [], []
-        for task_path in task_paths:
+        total_tasks = len(task_paths)
+        for task_number, task_path in enumerate(task_paths):
             with open(task_path, "r") as fhandle:
                 task = json.load(fhandle)
 
@@ -94,7 +95,7 @@ class Evaluator:
                 pixel_acc.append(self._check_pixel_values(output, solution))
                 if verbose:
                     print(
-                        f"Task {task_path} test {tx + 1}: task solved: {task_acc[-1]}, "
+                        f"Task {task_number}/{total_tasks} test {tx + 1}: task solved: {task_acc[-1]}, "
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 

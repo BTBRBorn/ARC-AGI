@@ -51,7 +51,9 @@ def load_checkpoint(checkpoint_path, weight_only=False):
     optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True)
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.scheduler_iter)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.scheduler_iter
+    )
     scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
     tokenizer = checkpoint["tokenizer"]
@@ -71,11 +73,17 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
 
 def create_data(
-    config, tokenizer, save_folder="pretraining/", is_train=True, rolled=True, augmented=True
+    data_path,
+    vocab_size,
+    tokenizer,
+    save_folder="pretraining/",
+    is_train=True,
+    rolled=True,
+    augmented=True,
 ):
-    data_path = Path(config.data_path)
+    data_path = Path(data_path)
     filelist = os.listdir(data_path)
-    augmentor = Augmentor(config.vocab_size, tokenizer.special_tokens)
+    augmentor = Augmentor(vocab_size, tokenizer.special_tokens)
     data = []
     for file in filelist:
         json_path = data_path / file
@@ -104,11 +112,12 @@ def create_data(
     else:
         np.save(save_folder / "validation.npy", data)
 
+
 def plot_losses(results):
-    train_loss, val_loss = results['train_losses'], results['val_losses']
-    plt.plot(range(1, len(train_loss)+1), train_loss, label='training', color='green')
-    plt.plot(range(1, len(val_loss)+1), val_loss, label='validation', color='red')
-    plt.title('Train and Validation Losses vs Num Epochs')
-    plt.xlabel('Num Epochs')
-    plt.ylabel('Loss')
-    plt.legend(loc='best')
+    train_loss, val_loss = results["train_losses"], results["val_losses"]
+    plt.plot(range(1, len(train_loss) + 1), train_loss, label="training", color="green")
+    plt.plot(range(1, len(val_loss) + 1), val_loss, label="validation", color="red")
+    plt.title("Train and Validation Losses vs Num Epochs")
+    plt.xlabel("Num Epochs")
+    plt.ylabel("Loss")
+    plt.legend(loc="best")

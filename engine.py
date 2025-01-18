@@ -73,7 +73,8 @@ def train(
     for epoch in tqdm(range(args.num_epochs)):
         # Change the training data
         create_data(
-            config=config,
+            data_path=config.data_path_train,
+            vocab_size=config.vocab_size,
             tokenizer=tokenizer,
             save_folder="pretraining/",
             is_train=True,

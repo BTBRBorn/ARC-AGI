@@ -13,19 +13,20 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--block_size", type=int, default=1024)
-parser.add_argument("--n_layer", type=int, default=12)
+parser.add_argument("--block_size", type=int, default=2048)
+parser.add_argument("--n_layer", type=int, default=16)
 parser.add_argument("--batch_size", type=int, default=8)
-parser.add_argument("--head_size", type=int, default=16)
-parser.add_argument("--n_head", type=int, default=4)
-parser.add_argument("--data_path", type=str, default="data/training")
+parser.add_argument("--head_size", type=int, default=32)
+parser.add_argument("--n_head", type=int, default=8)
+parser.add_argument("--data_path_train", type=str, default="data/combined")
+parser.add_argument("--data_path_val", type=str, default="data/training")
 parser.add_argument("--dataloader_num_workers", type=int, default=2)
 parser.add_argument("--compile_model", type=int, choices={0, 1}, default=0)
 parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
 parser.add_argument("--checkpoint_save_path", type=str, default="")
 parser.add_argument("--checkpoint_load_path", type=str, default="")
-parser.add_argument("--scheduler_iter", type=int, default=1500)
+parser.add_argument("--scheduler_iter", type=int, default=1000)
 parser.add_argument("--weight_decay", type=float, default=1.0)
 
 args = parser.parse_args()
@@ -92,7 +93,8 @@ if config.compile_model:
 
 # Create the training data
 utils.create_data(
-    config=config,
+    data_path=config.data_path_train,
+    vocab_size=config.vocab_size,
     tokenizer=tokenizer,
     save_folder="pretraining/",
     is_train=True,
@@ -101,7 +103,8 @@ utils.create_data(
 )
 # Create the validation data
 utils.create_data(
-    config=config,
+    data_path=config.data_path_val,
+    vocab_size=config.vocab_size,
     tokenizer=tokenizer,
     save_folder="pretraining/",
     is_train=False,

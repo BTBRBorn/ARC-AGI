@@ -14,9 +14,11 @@ class Augmentor:
             flat_l.extend(e)
         return flat_l
 
-    def _get_mappings(self, example):
-        flattened = self._flatten(example["input"]) + self._flatten(example["output"])
-        color_set = set(flattened)#.difference({0})
+    def _get_mappings(self, task):
+        flattened = []
+        for example in task:
+            flattened.extend(self._flatten(example["input"]) + self._flatten(example["output"]))
+        color_set = set(flattened)
         mappings = {}
         copy_colors = list(self.colors)
         for c in color_set:
@@ -32,14 +34,14 @@ class Augmentor:
                 #if array[i][j] != 0:
                 array[i][j] = mappings[array[i][j]]
 
-    def _change_one_example(self, example):
-        mappings = self._get_mappings(example)
+    def _change_one_example(self, example, mappings):
         self._change_array(example["input"], mappings)
         self._change_array(example["output"], mappings)
 
-    def _change_colors(self, task: list[list]):
+    def _change_colors(self, task: list[dict]):
+        mappings = self._get_mappings(task)
         for example in task:
-            self._change_one_example(example)
+            self._change_one_example(example, mappings)
 
     def apply(self, task):
             self._change_colors(task)

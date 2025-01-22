@@ -59,19 +59,7 @@ else:
 
     gpt = model.GPT(config=config).to(config.device)
 
-    optim_groups = [
-        {
-            "params": [param for param in gpt.parameters() if param.dim() >= 2],
-            "weight_decay": config.weight_decay,
-        },
-        {
-            "params": [param for param in gpt.parameters() if param.dim() < 2],
-            "weight_decay": 0.0,
-        },
-    ]
-    optimizer = torch.optim.AdamW(
-        optim_groups, lr=config.learning_rate, fused=True, betas=(0.9, 0.95)
-    )
+    optimizer = gpt.configure_optimizer()
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=config.scheduler_iter

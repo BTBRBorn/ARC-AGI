@@ -1,8 +1,8 @@
 import random
 
+
 class Augmentor:
     def __init__(self, vocab_size, special_tokens):
-
         self.special_tokens = special_tokens
         self.colors = list(
             set(range(0, vocab_size)) - set(self.special_tokens.values())
@@ -17,7 +17,9 @@ class Augmentor:
     def _get_mappings(self, task):
         flattened = []
         for example in task:
-            flattened.extend(self._flatten(example["input"]) + self._flatten(example["output"]))
+            flattened.extend(
+                self._flatten(example["input"]) + self._flatten(example["output"])
+            )
         color_set = set(flattened)
         mappings = {}
         copy_colors = list(self.colors)
@@ -31,7 +33,6 @@ class Augmentor:
         n_rows, n_columns = len(array), len(array[0])
         for i in range(n_rows):
             for j in range(n_columns):
-                #if array[i][j] != 0:
                 array[i][j] = mappings[array[i][j]]
 
     def _change_one_example(self, example, mappings):
@@ -44,4 +45,4 @@ class Augmentor:
             self._change_one_example(example, mappings)
 
     def apply(self, task):
-            self._change_colors(task)
+        self._change_colors(task)

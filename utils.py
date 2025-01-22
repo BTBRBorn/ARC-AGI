@@ -38,17 +38,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     gpt.load_state_dict(checkpoint["model_state_dict"])
 
-    optim_groups = [
-        {
-            "params": [param for param in gpt.parameters() if param.dim() >= 2],
-            "weight_decay": config.weight_decay,
-        },
-        {
-            "params": [param for param in gpt.parameters() if param.dim() < 2],
-            "weight_decay": 0.0,
-        },
-    ]
-    optimizer = torch.optim.AdamW(optim_groups, lr=config.learning_rate, fused=True)
+    optimizer = gpt.configure_optimizer()
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

@@ -45,7 +45,7 @@ class Evaluator:
                     next_token = next_token.item()
                 tokens = context.view(-1).tolist()
         if counter > threshold:
-            return None
+            return None, con_len
         for idx, token in enumerate(tokens[::-1], start=1):
             if token == tokenizer.special_tokens["start_of_output"]:
                 output_index = idx

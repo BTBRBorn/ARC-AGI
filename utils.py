@@ -1,11 +1,6 @@
 import torch
 import model
 from pathlib import Path
-import os
-import numpy as np
-import json
-from get_augmentor import Augmentor
-import random
 import matplotlib.pyplot as plt
 
 
@@ -60,47 +55,6 @@ def load_checkpoint(checkpoint_path, weight_only=False):
     }
 
     return return_dict
-
-
-def create_data(
-    data_path,
-    vocab_size,
-    tokenizer,
-    save_folder="pretraining/",
-    is_train=True,
-    rolled=True,
-    augmented=True,
-):
-    data_path = Path(data_path)
-    filelist = os.listdir(data_path)
-    augmentor = Augmentor(vocab_size, tokenizer.special_tokens)
-    data = []
-    for file in filelist:
-        json_path = data_path / file
-        with open(json_path, "r") as fhandle:
-            task = json.load(fhandle)
-        if is_train:
-            task = task["train"]
-        else:
-            task = task["test"]
-        if augmented:
-            augmentor.apply(task)  # In-place change
-        task = tokenizer.encode(task)
-        np_task = np.array(task, dtype=np.uint8)
-        data.append(np_task)
-    data = np.concatenate(data)
-
-    save_folder = data_path.parent / save_folder
-    if not save_folder.exists():
-        save_folder.mkdir(parents=True)
-
-    if rolled:
-        data = np.roll(data, shift=random.randint(0, 50000))
-
-    if is_train:
-        np.save(save_folder / "training.npy", data)
-    else:
-        np.save(save_folder / "validation.npy", data)
 
 
 def plot_losses(results):

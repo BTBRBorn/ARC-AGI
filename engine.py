@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import time
-from utils import create_data
+from get_dataloaders import create_dataloaders
 
 
 def train_step(model, dataloader, optimizer, config):
@@ -56,8 +56,6 @@ def val_step(model, dataloader, config):
 
 def train(
     model,
-    train_dataloader,
-    val_dataloader,
     optimizer,
     scheduler,
     tokenizer,
@@ -65,6 +63,9 @@ def train(
     num_epochs,
     results,
 ):
+
+    train_dataloader, val_dataloader = create_dataloaders(config, tokenizer)
+
     total_tokens = (
         len(train_dataloader) * config.batch_size * config.block_size
         + len(val_dataloader) * config.batch_size * config.block_size
@@ -74,17 +75,9 @@ def train(
     val_loss = val_step(model, val_dataloader, config)
     print(f'Starting training loss: {train_loss:.4f}, validation loss: {val_loss:.4f}')
     print('-'*100)
+
     for epoch in tqdm(range(num_epochs)):
-        # Change the training data
-        create_data(
-            data_path=config.data_path_train,
-            vocab_size=config.vocab_size,
-            tokenizer=tokenizer,
-            save_folder="pretraining/",
-            is_train=True,
-            rolled=True,
-            augmented=True,
-        )
+        train_dataloader, val_dataloader = create_dataloaders(config, tokenizer)
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)

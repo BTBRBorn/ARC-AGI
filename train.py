@@ -2,11 +2,11 @@ from pathlib import Path
 import argparse
 import torch
 import model
-import get_dataloaders
 import engine
 from get_tokenizer import Tokenizer
 import utils
 from configurations import Config
+from get_dataloaders import create_data
 
 parser = argparse.ArgumentParser()
 
@@ -79,18 +79,10 @@ print(f"Total number of parameters: {sum(p.numel() for p in gpt.parameters())}")
 if config.compile_model:
     gpt = torch.compile(gpt)
 
-# Create the training data
-utils.create_data(
-    data_path=config.data_path_train,
-    vocab_size=config.vocab_size,
-    tokenizer=tokenizer,
-    save_folder="pretraining/",
-    is_train=True,
-    rolled=True,
-    augmented=True,
-)
 # Create the validation data
-utils.create_data(
+# Training data will be created inside create_dataloaders function
+# since it will be recreated and modified in every epoch
+create_data(
     data_path=config.data_path_val,
     vocab_size=config.vocab_size,
     tokenizer=tokenizer,
@@ -100,12 +92,8 @@ utils.create_data(
     augmented=False,
 )
 
-train_dataloader, val_dataloader = get_dataloaders.create_dataloaders(config)
-
 results = engine.train(
     model=gpt,
-    train_dataloader=train_dataloader,
-    val_dataloader=val_dataloader,
     optimizer=optimizer,
     scheduler=scheduler,
     tokenizer=tokenizer,
@@ -124,5 +112,3 @@ if args.checkpoint_save_path:
         config=config,
         results=results,
     )
-
-utils.plot_losses(results)

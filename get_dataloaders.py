@@ -19,7 +19,7 @@ def create_data(
 ):
     data_path = Path(data_path)
     filelist = os.listdir(data_path)
-    augmentor = Augmentor(vocab_size, tokenizer.special_tokens)
+    augmentor = Augmentor()
     data = []
     for file in filelist:
         json_path = data_path / file
@@ -30,7 +30,7 @@ def create_data(
         else:
             task = task["test"]
         if augmented:
-            augmentor.apply(task)  # In-place change
+            augmentor(task)  # In-place change
         task = tokenizer.encode(task)
         np_task = np.array(task, dtype=np.uint8)
         data.append(np_task)

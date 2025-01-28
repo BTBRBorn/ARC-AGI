@@ -1,7 +1,6 @@
 import pytest
 from unittest import mock
 from get_augmentor import Augmentor
-from get_tokenizer import Tokenizer
 
 
 @pytest.fixture
@@ -22,9 +21,7 @@ def data():
 
 @pytest.fixture
 def augmentor():
-    vocab_size = 256
-    tokenizer = Tokenizer(vocab_size)
-    augmentor = Augmentor(vocab_size, tokenizer.special_tokens)
+    augmentor = Augmentor()
     return augmentor
 
 
@@ -35,7 +32,7 @@ def test_flatten(augmentor):
 
 
 def test_get_mappings(augmentor, data):
-    with mock.patch("random.choice", side_effect= [10, 11, 12, 13, 14, 15]):
+    with mock.patch("random.choice", side_effect=[10, 11, 12, 13, 14, 15]):
         mappings_1 = augmentor._get_mappings(data["train"][0])
         mappings_2 = augmentor._get_mappings(data["train"][1])
     assert mappings_1 == {0: 10, 1: 11}
@@ -64,7 +61,7 @@ def test_change_colors(augmentor, data):
     task = data["train"]
     with mock.patch(
         "get_augmentor.Augmentor._get_mappings",
-        return_value={1: 11, 2: 12, 4: 13, 7: 13, 8: 15, 0:16},
+        return_value={1: 11, 2: 12, 4: 13, 7: 13, 8: 15, 0: 16},
     ):
         augmentor._change_colors(task)
     assert task == [

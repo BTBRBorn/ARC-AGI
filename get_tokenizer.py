@@ -27,7 +27,7 @@ class Tokenizer:
                 flat_l.extend(e)
         return flat_l
 
-    def encode(self, array):
+    def encode(self, array: list[dict]):
         data = self._flatten(
             [
                 [self.special_tokens["start_of_input"]]
@@ -44,7 +44,7 @@ class Tokenizer:
 
         return data
 
-    def decode(self, tokens):
+    def decode(self, tokens: list[int]):
         examples = []
         context = None
         for token in tokens:

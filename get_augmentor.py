@@ -2,11 +2,8 @@ import random
 
 
 class Augmentor:
-    def __init__(self, vocab_size, special_tokens):
-        self.special_tokens = special_tokens
-        self.colors = list(
-            set(range(0, vocab_size)) - set(self.special_tokens.values())
-        )
+    def __init__(self):
+        self.colors = list(range(0, 10))
 
     def _flatten(self, array):
         flat_l = []
@@ -44,5 +41,5 @@ class Augmentor:
         for example in task:
             self._change_one_example(example, mappings)
 
-    def apply(self, task):
+    def __call__(self, task):
         self._change_colors(task)

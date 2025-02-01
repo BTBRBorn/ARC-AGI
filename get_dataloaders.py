@@ -10,14 +10,14 @@ import random
 
 def create_data(
     data_path,
-    vocab_size,
     tokenizer,
-    save_folder="pretraining/",
+    output_file_path,
     is_train=True,
     rolled=True,
     augmented=True,
 ):
     data_path = Path(data_path)
+    output_file_path = Path(output_file_path)
     filelist = os.listdir(data_path)
     augmentor = Augmentor()
     data = []
@@ -37,17 +37,14 @@ def create_data(
 
     data = np.concatenate(data)
 
-    save_folder = data_path.parent / save_folder
+    save_folder = data_path.parent / output_file_path.parent
     if not save_folder.exists():
         save_folder.mkdir(parents=True)
 
     if rolled:
         data = np.roll(data, shift=random.randint(0, 50000))
 
-    if is_train:
-        np.save(save_folder / "training.npy", data)
-    else:
-        np.save(save_folder / "validation.npy", data)
+    np.save(data_path.parent / output_file_path, data)
 
 
 class CustomDataset(Dataset):
@@ -76,9 +73,8 @@ def create_dataloaders(config, tokenizer, train_shuffle=True):
     # Apply changes to the training dataset
     create_data(
         data_path=config.data_path_train,
-        vocab_size=config.vocab_size,
         tokenizer=tokenizer,
-        save_folder="pretraining/",
+        output_file_path="pretraining/training.npy",
         is_train=True,
         rolled=True,
         augmented=True,

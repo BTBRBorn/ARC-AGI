@@ -3,21 +3,21 @@ import argparse
 import torch
 import model
 import engine
-from get_tokenizer import Tokenizer
 import utils
 from configurations import Config
 from get_dataloaders import create_data
+import pickle
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
-parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--block_size", type=int, default=4096)
-parser.add_argument("--n_layer", type=int, default=32)
-parser.add_argument("--batch_size", type=int, default=2)
-parser.add_argument("--head_size", type=int, default=32)
-parser.add_argument("--n_head", type=int, default=8)
+parser.add_argument("--vocab_size", type=int, default=256)
+parser.add_argument("--block_size", type=int, default=2048)
+parser.add_argument("--n_layer", type=int, default=24)
+parser.add_argument("--batch_size", type=int, default=8)
+parser.add_argument("--head_size", type=int, default=64)
+parser.add_argument("--n_head", type=int, default=4)
 parser.add_argument("--data_path_train", type=str, default="data/combined")
 parser.add_argument("--data_path_val", type=str, default="data/training")
 parser.add_argument("--dataloader_num_workers", type=int, default=2)
@@ -65,7 +65,8 @@ else:
         optimizer, T_max=config.scheduler_iter
     )
 
-    tokenizer = Tokenizer(config.vocab_size)
+    with open(Path('tokenizers/tokenizer.pickle'), 'rb') as fhandle:
+        tokenizer = pickle.load(fhandle)
 
     results = {"train_losses": [], "val_losses": []}
 
@@ -84,9 +85,8 @@ if config.compile_model:
 # since it will be recreated and modified in every epoch
 create_data(
     data_path=config.data_path_val,
-    vocab_size=config.vocab_size,
     tokenizer=tokenizer,
-    save_folder="pretraining/",
+    output_file_path="pretraining/validation.npy",
     is_train=False,
     rolled=False,
     augmented=False,

@@ -46,11 +46,10 @@ class Evaluator:
                 tokens = context.view(-1).tolist()
         if counter > threshold:
             return None, con_len
-        for idx, token in enumerate(tokens[::-1], start=1):
-            if token == tokenizer.special_tokens["start_of_output"]:
-                output_index = idx
-                break
-        return tokenizer.decode(tokens[-output_index:])[0]["output"], con_len
+
+        tokens = tokenizer.decode(tokens, only_last_output=True)
+        
+        return tokens[0]["output"], con_len
 
     def _check_solution(self, output, solution):
         if solution is None:

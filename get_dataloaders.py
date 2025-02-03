@@ -2,49 +2,6 @@ from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 import torch
 import numpy as np
-from get_augmentor import Augmentor
-import os
-import json
-import random
-
-
-def create_data(
-    data_path,
-    tokenizer,
-    output_file_path,
-    is_train=True,
-    rolled=True,
-    augmented=True,
-):
-    data_path = Path(data_path)
-    output_file_path = Path(output_file_path)
-    filelist = os.listdir(data_path)
-    augmentor = Augmentor()
-    data = []
-    for file in filelist:
-        json_path = data_path / file
-        with open(json_path, "r") as fhandle:
-            task = json.load(fhandle)
-        if is_train:
-            task = task["train"]
-        else:
-            task = task["test"]
-        if augmented:
-            augmentor(task)  # In-place change
-        task = tokenizer.encode(task)
-        np_task = np.array(task, dtype=np.uint8)
-        data.append(np_task)
-
-    data = np.concatenate(data)
-
-    save_folder = data_path.parent / output_file_path.parent
-    if not save_folder.exists():
-        save_folder.mkdir(parents=True)
-
-    if rolled:
-        data = np.roll(data, shift=random.randint(0, 50000))
-
-    np.save(data_path.parent / output_file_path, data)
 
 
 class CustomDataset(Dataset):
@@ -67,22 +24,14 @@ class CustomDataset(Dataset):
         return x, y
 
 
-def create_dataloaders(config, tokenizer, train_shuffle=True):
-    train_dataset_path = config.data_path_train.parent / "pretraining/training.npy"
-    val_dataset_path = config.data_path_val.parent / "pretraining/validation.npy"
-    # Apply changes to the training dataset
-    create_data(
-        data_path=config.data_path_train,
-        tokenizer=tokenizer,
-        output_file_path="pretraining/training.npy",
-        is_train=True,
-        rolled=True,
-        augmented=True,
-    )
+def create_dataloaders(config, num_shard, train_shuffle=True):
 
-    train_dataset = CustomDataset(train_dataset_path, config.block_size)
-    val_dataset = CustomDataset(val_dataset_path, config.block_size)
-    
+    train_data_path = Path(config.data_path) / f"training_{num_shard}.npy"
+    val_data_path = Path(config.data_path) / "validation.npy"
+
+    train_dataset = CustomDataset(train_data_path, config.block_size)
+    val_dataset = CustomDataset(val_data_path, config.block_size)
+
     train_dataloader = DataLoader(
         train_dataset,
         config.batch_size,

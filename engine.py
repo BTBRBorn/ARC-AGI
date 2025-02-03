@@ -58,13 +58,12 @@ def train(
     model,
     optimizer,
     scheduler,
-    tokenizer,
     config,
     num_epochs,
     results,
 ):
-
-    train_dataloader, val_dataloader = create_dataloaders(config, tokenizer)
+    num_shard = len(results['train_losses']) + 1
+    train_dataloader, val_dataloader = create_dataloaders(config, num_shard=num_shard)
 
     total_tokens = (
         len(train_dataloader) * config.batch_size * config.block_size
@@ -77,7 +76,10 @@ def train(
     print('-'*100)
 
     for epoch in tqdm(range(num_epochs)):
-        train_dataloader, val_dataloader = create_dataloaders(config, tokenizer)
+
+        num_shard = len(results['train_losses']) + 1
+        train_dataloader, val_dataloader = create_dataloaders(config, num_shard=num_shard)
+
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
         val_loss = val_step(model, val_dataloader, config)

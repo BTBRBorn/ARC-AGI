@@ -41,5 +41,24 @@ class Augmentor:
         for example in task:
             self._change_one_example(example, mappings)
 
-    def __call__(self, task):
-        self._change_colors(task)
+    def _add_noise_array(self, array, ratio):
+        n_rows, n_cols = len(array), len(array[0])
+        num_changes = int(n_rows * n_cols * ratio)
+        for _ in range(num_changes):
+            i, j = random.randint(0, n_rows-1), random.randint(0, n_cols-1)
+            random_value = random.randint(0, 9)
+            array[i][j] = random_value
+
+    def _add_noise_example(self, example, ratio):
+        self._add_noise_array(example['input'], ratio)
+        self._add_noise_array(example['output'], ratio)
+    
+    def _add_noise_task(self, task, ratio=0.5):
+        for example in task:
+            self._add_noise_example(example, ratio)
+
+    def __call__(self, task, change_colors=True, add_noise=False):
+        if change_colors:
+            self._change_colors(task)
+        if add_noise:
+            self._add_noise_task(task)

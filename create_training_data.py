@@ -9,6 +9,7 @@ from get_augmentor import Augmentor
 import os
 import random
 import json
+from get_arc_generator import ArcGenerator
 
 parser = argparse.ArgumentParser()
 
@@ -16,7 +17,7 @@ parser.add_argument("--train_data_path", type=str, default="data/combined")
 parser.add_argument("--val_data_path", type=str, default="data/training")
 parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
 parser.add_argument("--num_shards", type=int, default=10)
-parser.add_argument("--vocab_size", type=int, default=32)
+parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--num_workers", type=int, default=10)
 parser.add_argument(
     "--tokenizer_save_path", type=str, default=""
@@ -39,11 +40,24 @@ def create_data(
     output_file_path = Path(output_file_path)
     filelist = os.listdir(data_path)
     augmentor = Augmentor()
-    data = []
+    
+    #Add data from actual arc tasks
+    tasks = []
     for file in filelist:
         json_path = data_path / file
         with open(json_path, "r") as fhandle:
             task = json.load(fhandle)
+        tasks.append(task)
+
+    if is_train: 
+        #Add data from generated arc tasks
+        arc_generator = ArcGenerator()
+        generated_tasks = arc_generator(num_repeats=800)
+        #Combined the two
+        tasks.extend(generated_tasks)
+    
+    data = []
+    for task in tasks:
         if is_train:
             task = task["train"]
         else:
@@ -71,8 +85,8 @@ if __name__ == "__main__":
     PROCESSED_DATA_PATH = Path(args.processed_data_path)
     TRAIN_DATA_PATH = Path(args.train_data_path)
     VAL_DATA_PATH = Path(args.val_data_path)
-
-    shutil.rmtree(PROCESSED_DATA_PATH)
+    if PROCESSED_DATA_PATH.exists():
+        shutil.rmtree(PROCESSED_DATA_PATH)
 
     print("Training data is being created.")
     for i in tqdm(range(1, args.num_shards + 1)):

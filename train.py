@@ -25,7 +25,7 @@ parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
 parser.add_argument("--checkpoint_save_path", type=str, default="")
 parser.add_argument("--checkpoint_load_path", type=str, default="")
-parser.add_argument("--scheduler_iter", type=int, default=800)
+parser.add_argument("--scheduler_iter", type=int, default=1000)
 parser.add_argument("--weight_decay", type=float, default=1.0)
 parser.add_argument("--tokenizer_path", type=str, default="")
 

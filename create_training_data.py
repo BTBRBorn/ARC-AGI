@@ -13,8 +13,8 @@ from get_arc_generator import ArcGenerator
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--train_data_path", type=str, default="data/combined")
-parser.add_argument("--val_data_path", type=str, default="data/training")
+parser.add_argument("--train_data_path", type=str, default="data/finetune")
+parser.add_argument("--val_data_path", type=str, default="data/finetune")
 parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
 parser.add_argument("--num_shards", type=int, default=10)
 parser.add_argument("--vocab_size", type=int, default=16)
@@ -52,7 +52,7 @@ def create_data(
     if is_train: 
         #Add data from generated arc tasks
         arc_generator = ArcGenerator()
-        generated_tasks = arc_generator(num_repeats=800)
+        generated_tasks = arc_generator(num_repeats=10)
         #Combined the two
         tasks.extend(generated_tasks)
     

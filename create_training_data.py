@@ -9,8 +9,8 @@ import os
 import random
 import json
 from get_arc_generator import ArcGenerator
-import multiprocessing as mp
 import functools
+from concurrent import futures
 
 parser = argparse.ArgumentParser()
 
@@ -48,7 +48,7 @@ def create_data(
         with open(json_path, "r") as fhandle:
             task = json.load(fhandle)
         tasks.append(task)
-        if is_train and (i % 10 == 0):
+        if is_train and (i % 20 == 0):
             generated_tasks = arc_generator()
             tasks.extend(generated_tasks)
 
@@ -97,12 +97,11 @@ if __name__ == "__main__":
         add_noise=False,
     )
 
-    training_file_paths = (
+    training_file_paths = [
         PROCESSED_DATA_PATH / f"training_{i}.npy" for i in range(1, args.num_shards + 1)
-    )
-
-    with mp.Pool(args.num_workers) as pool:
-        for outfile_path in pool.imap(train_create_data, training_file_paths):
+    ]
+    with futures.ProcessPoolExecutor(args.num_workers) as executor:
+        for outfile_path in executor.map(train_create_data, training_file_paths):
             print(f'File {outfile_path} is created.')
 
     # Validation data is being created
@@ -113,7 +112,7 @@ if __name__ == "__main__":
         is_train=False,
         rolled=False,
         augmented=False,
-        add_noise=True,
+        add_noise=False,
     )
 
     if args.tokenizer_save_path:

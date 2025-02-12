@@ -14,8 +14,8 @@ parser.add_argument("--num_epochs", type=int, default=10)
 parser.add_argument("--learning_rate", type=float, default=1e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
-parser.add_argument("--n_layer", type=int, default=16)
-parser.add_argument("--batch_size", type=int, default=8)
+parser.add_argument("--n_layer", type=int, default=32)
+parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
@@ -83,7 +83,6 @@ print(f"Total number of parameters: {sum(p.numel() for p in gpt.parameters())}")
 if config.compile_model:
     gpt = torch.compile(gpt)
 
-
 results = engine.train(
     model=gpt,
     optimizer=optimizer,
@@ -91,15 +90,6 @@ results = engine.train(
     config=config,
     num_epochs=args.num_epochs,
     results=results,
+    tokenizer=tokenizer,
+    checkpoint_save_path=Path(args.checkpoint_save_path),
 )
-
-if args.checkpoint_save_path:
-    utils.save_checkpoint(
-        checkpoint_path=Path(args.checkpoint_save_path),
-        model=gpt,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        tokenizer=tokenizer,
-        config=config,
-        results=results,
-    )

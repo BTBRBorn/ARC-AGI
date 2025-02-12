@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 import numpy as np
 import random
+import itertools
 
 
 # Helper Functions
@@ -10,6 +11,13 @@ def trim_array(array, *, left=0, right=0, up=0, down=0):
     up = None if up == 0 else up
     left = None if left == 0 else left
     return array[up:down, left:right]
+
+
+def return_example(arc_func, *args, idx=0):
+    gen = arc_func(*args)
+    task = next(gen)
+    input_array, output_array = task[idx]["input"], task[idx]["output"]
+    return np.array(input_array), np.array(output_array)
 
 
 def random_rectangle_zeros(min_size=2, max_size=8):
@@ -39,6 +47,20 @@ def random_location(n_rows, n_cols):
     return random.randint(0, n_rows - 1), random.randint(0, n_cols - 1)
 
 
+def random_impute(array, ratio, values: tuple[int, ...] = (1,)):
+    values_cycle = itertools.cycle(values)
+    num_imps = int(array.size * ratio)
+    num_imps = num_imps if num_imps else 1
+    locations = []
+    while len(locations) != num_imps:
+        i, j = random_location(*array.shape)
+        if (i, j) in locations:
+            continue
+        else:
+            array[i, j] = next(values_cycle)
+            locations.append((i, j))
+
+
 def impute_diagonal(array, start_position: tuple[int, int], direction):
     if direction == "ne":
         sums = (-1, 1)
@@ -61,7 +83,20 @@ def impute_diagonal(array, start_position: tuple[int, int], direction):
             break
 
 
-# ARC task generators starts from this line
+# Arc task generator function template
+def stub_func(num_repeat):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros()
+            output_array = random_rectangle_zeros()
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+### ARC task generators starts from this line ###
 def rect_encap(num_repeat, max_rec_size=(8, 8), max_padding=5):
     while True:
         examples = []
@@ -302,8 +337,104 @@ def color_mapping_dots(num_repeat, min_size=4, max_size=10):
         yield examples
 
 
+def copy_rectangle(num_repeat, min_size=2, max_size=8):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size, max_size)
+            n_rows, n_cols = input_array.shape
+            output_array = np.concatenate((input_array,) * n_rows, axis=0)
+            output_array = np.concatenate((output_array,) * n_cols, axis=1)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def copy_one_color(num_repeat, min_size=2, max_size=8):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size, max_size)
+            random_impute(input_array, ratio=random.random(), values=(1,))
+            n_rows, n_cols = input_array.shape
+            output_array = np.concatenate((input_array,) * n_rows, axis=0)
+            output_array = np.concatenate((output_array,) * n_cols, axis=1)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def copy_multi_color(num_repeat, min_size=2, max_size=8):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size, max_size)
+            random_impute(input_array, ratio=random.random(), values=(1, 2, 3))
+            n_rows, n_cols = input_array.shape
+            output_array = np.concatenate((input_array,) * n_rows, axis=0)
+            output_array = np.concatenate((output_array,) * n_cols, axis=1)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def flip_horizontal_one_color(num_repeat, min_size=4, max_size=20):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size=min_size, max_size=max_size)
+            random_impute(input_array, ratio=random.uniform(0.2, 0.8))
+            output_array = np.flip(input_array, axis=0)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def flip_vertical_one_color(num_repeat, min_size=4, max_size=20):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size=min_size, max_size=max_size)
+            random_impute(input_array, ratio=random.uniform(0.2, 0.8))
+            output_array = np.flip(input_array, axis=1)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def flip_horizontal_multi_color(num_repeat, min_size=4, max_size=20):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size=min_size, max_size=max_size)
+            random_impute(input_array, ratio=random.uniform(0.2, 0.8), values=(1, 2, 3))
+            output_array = np.flip(input_array, axis=0)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
+def flip_vertical_multi_color(num_repeat, min_size=4, max_size=20):
+    while True:
+        examples = []
+        for _ in range(num_repeat):
+            input_array = random_rectangle_zeros(min_size=min_size, max_size=max_size)
+            random_impute(input_array, ratio=random.uniform(0.2, 0.8), values=(1, 2, 3))
+            output_array = np.flip(input_array, axis=1)
+            examples.append(
+                {"input": input_array.tolist(), "output": output_array.tolist()}
+            )
+        yield examples
+
+
 class ArcGenerator:
-    def __init__(self, num_repeat: int | Iterable[int]):
+    def __init__(self, num_repeat: int | Iterable[int], verbose=False):
         self.task_generators = [
             rect_encap(num_repeat),
             rect_encap_v2(num_repeat),
@@ -316,7 +447,16 @@ class ArcGenerator:
             color_mapping_columns(num_repeat=4),
             color_mapping_rows(num_repeat=4),
             color_mapping_dots(num_repeat=4),
+            copy_rectangle(num_repeat),
+            copy_one_color(num_repeat),
+            copy_multi_color(num_repeat),
+            flip_vertical_one_color(num_repeat),
+            flip_vertical_multi_color(num_repeat),
+            flip_horizontal_one_color(num_repeat),
+            flip_horizontal_multi_color(num_repeat),
         ]
+        if verbose:
+            print(f"{len(self.task_generators)} generators initiated.")
 
     def __call__(self):
         tasks = []

@@ -3,6 +3,8 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 import time
 from get_dataloaders import create_dataloaders
+import utils
+from pathlib import Path
 
 
 def train_step(model, dataloader, optimizer, config):
@@ -61,8 +63,10 @@ def train(
     config,
     num_epochs,
     results,
+    tokenizer,
+    checkpoint_save_path,
 ):
-    num_shard = len(results['train_losses']) + 1
+    num_shard = len(results["train_losses"]) + 1
     train_dataloader, val_dataloader = create_dataloaders(config, num_shard=num_shard)
 
     total_tokens = (
@@ -72,13 +76,20 @@ def train(
 
     train_loss = val_step(model, train_dataloader, config)
     val_loss = val_step(model, val_dataloader, config)
-    print(f'Starting training loss: {train_loss:.4f}, validation loss: {val_loss:.4f}')
-    print('-'*100)
+    print(f"Continuing from epoch: {len(results['val_losses'])}")
+    print(f"Starting training loss: {train_loss:.4f}, validation loss: {val_loss:.4f}")
+    print("-" * 100)
+
+    if len(results["val_losses"]) == 0:
+        min_val_loss = 1000
+    else:
+        min_val_loss = min(results["val_losses"])
 
     for epoch in tqdm(range(num_epochs)):
-
-        num_shard = len(results['train_losses']) + 1
-        train_dataloader, val_dataloader = create_dataloaders(config, num_shard=num_shard)
+        num_shard = len(results["train_losses"]) + 1
+        train_dataloader, val_dataloader = create_dataloaders(
+            config, num_shard=num_shard
+        )
 
         start = time.time()
         train_loss, norm = train_step(model, train_dataloader, optimizer, config)
@@ -93,4 +104,20 @@ def train(
             f"Epoch: {epoch + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
             + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
         )
+        if (
+            checkpoint_save_path
+            and len(results["val_losses"]) > 300
+            and val_loss < min_val_loss
+        ):
+            min_val_loss = val_loss
+            utils.save_checkpoint(
+                checkpoint_path=Path(checkpoint_save_path),
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                tokenizer=tokenizer,
+                config=config,
+                results=results,
+            )
+
     return results

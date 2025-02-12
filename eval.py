@@ -23,7 +23,7 @@ class Evaluator:
         tokens = tokenizer.encode(new_task["context"])
         return tokens[:-1], len(tokens[:-1])
 
-    def _generate_solution(self, model, task, test_index, threshold=2500):
+    def _generate_solution(self, model, task, test_index, threshold=2000):
         tokenizer = self.checkpoint["tokenizer"]
         config = self.checkpoint["config"]
         context, con_len = self._create_context(task, test_index, tokenizer)

@@ -55,6 +55,7 @@ def create_data(
     for task in tasks:
         if is_train:
             task = task["train"]
+            random.shuffle(task)
         else:
             task = task["test"]
         if augmented:
@@ -63,6 +64,7 @@ def create_data(
         np_task = np.array(task, dtype=np.uint8)
         data.append(np_task)
 
+    random.shuffle(data)
     data = np.concatenate(data)
 
     if rolled:

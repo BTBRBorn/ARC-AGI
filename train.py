@@ -25,8 +25,8 @@ parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
 parser.add_argument("--checkpoint_save_path", type=str, default="")
 parser.add_argument("--checkpoint_load_path", type=str, default="")
-parser.add_argument("--scheduler_iter", type=int, default=1000)
-parser.add_argument("--weight_decay", type=float, default=1.0)
+parser.add_argument("--scheduler_iter", type=int, default=2000)
+parser.add_argument("--weight_decay", type=float, default=0.01)
 parser.add_argument("--tokenizer_path", type=str, default="")
 
 args = parser.parse_args()
@@ -93,3 +93,14 @@ results = engine.train(
     tokenizer=tokenizer,
     checkpoint_save_path=Path(args.checkpoint_save_path),
 )
+
+if args.checkpoint_save_path and len(results['val_losses']) < 300:
+    utils.save_checkpoint(
+        checkpoint_path=Path(args.checkpoint_save_path),
+        model=gpt,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        tokenizer=tokenizer,
+        config=config,
+        results=results,
+    )

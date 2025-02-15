@@ -76,7 +76,7 @@ def train(
 
     train_loss = val_step(model, train_dataloader, config)
     val_loss = val_step(model, val_dataloader, config)
-    print(f"Continuing from epoch: {len(results['val_losses'])}")
+    print(f"Continuing from epoch: {len(results['val_losses']) + 1}")
     print(f"Starting training loss: {train_loss:.4f}, validation loss: {val_loss:.4f}")
     print("-" * 100)
 

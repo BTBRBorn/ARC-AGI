@@ -1,4 +1,5 @@
 import random
+import numpy as np
 
 
 class Augmentor:
@@ -41,6 +42,39 @@ class Augmentor:
         for example in task:
             self._change_one_example(example, mappings)
 
-    def __call__(self, task, change_colors=True):
+    def _rotate90_array(self, array, k):
+        np_array = np.array(array)
+        return np.rot90(np_array, k=k).tolist()
+
+    def _rotate90_example(self, example, k):
+        example["input"] = self._rotate90_array(example["input"], k=k)
+        example["output"] = self._rotate90_array(example["output"], k=k)
+
+    def _rotate90(self, task):
+        k = random.randint(1, 4)
+        for example in task:
+            self._rotate90_example(example, k=k)
+
+    def _reflect_array(self, array, axis):
+        np_array = np.array(array)
+        return np.flip(np_array, axis=axis).tolist()
+
+    def _reflect_example(self, example, axis):
+        example["input"] = self._reflect_array(example["input"], axis=axis)
+        example["output"] = self._reflect_array(example["output"], axis=axis)
+
+    def _reflect_task(self, task):
+        axis = random.choice((-100, 0, 1, (0, 1)))
+        # If axis == -100 don't do anything
+        if axis == -100:
+            return None
+        for example in task:
+            self._reflect_example(example, axis=axis)
+
+    def __call__(self, task, change_colors=True, rotate90=True, reflect_task=True):
         if change_colors:
             self._change_colors(task)
+        if rotate90:
+            self._rotate90(task)
+        if reflect_task:
+            self._reflect_task(task)

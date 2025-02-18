@@ -11,11 +11,12 @@ from get_tokenizer import Tokenizer
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--num_epochs", type=int, default=10)
-parser.add_argument("--learning_rate", type=float, default=1e-4)
+parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
+parser.add_argument("--batch_accum_num", type=int, default=1)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
@@ -25,8 +26,8 @@ parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
 parser.add_argument("--checkpoint_save_path", type=str, default="")
 parser.add_argument("--checkpoint_load_path", type=str, default="")
-parser.add_argument("--scheduler_iter", type=int, default=2000)
-parser.add_argument("--weight_decay", type=float, default=0.01)
+parser.add_argument("--scheduler_iter", type=int, default=1200)
+parser.add_argument("--weight_decay", type=float, default=1.0)
 parser.add_argument("--tokenizer_path", type=str, default="")
 
 args = parser.parse_args()
@@ -79,6 +80,10 @@ print("-" * 50)
 print(optimizer)
 print("-" * 50)
 print(f"Total number of parameters: {sum(p.numel() for p in gpt.parameters())}")
+print("-" * 50)
+print(
+    f"Total number of tokens in every training step: {config.batch_size * args.batch_accum_num * config.block_size}"
+)
 
 if config.compile_model:
     gpt = torch.compile(gpt)
@@ -92,9 +97,10 @@ results = engine.train(
     results=results,
     tokenizer=tokenizer,
     checkpoint_save_path=Path(args.checkpoint_save_path),
+    batch_accum_num=args.batch_accum_num,
 )
 
-if args.checkpoint_save_path and len(results['val_losses']) < 300:
+if args.checkpoint_save_path and len(results["val_losses"]) < 300:
     utils.save_checkpoint(
         checkpoint_path=Path(args.checkpoint_save_path),
         model=gpt,

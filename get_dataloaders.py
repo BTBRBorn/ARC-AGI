@@ -37,12 +37,14 @@ def create_dataloaders(config, num_shard, train_shuffle=True):
         config.batch_size,
         shuffle=train_shuffle,
         num_workers=config.dataloader_num_workers,
+        pin_memory=True,
     )
     val_dataloader = DataLoader(
         val_dataset,
         config.batch_size,
         shuffle=False,
         num_workers=config.dataloader_num_workers,
+        pin_memory=True,
     )
 
     return train_dataloader, val_dataloader

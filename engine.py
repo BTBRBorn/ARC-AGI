@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import time
-from get_dataloaders import create_dataloaders
 import utils
 from pathlib import Path
 
@@ -11,6 +10,7 @@ def train_step(model, dataloader, optimizer, config, batch_accum_num):
     total_loss = 0.0
     total_norm = 0.0
     optimizer_steps = 0
+    tokens_processed = 0
     model.train()
     optimizer.zero_grad()
     for batch_num, (x, y) in enumerate(dataloader, start=1):
@@ -31,24 +31,17 @@ def train_step(model, dataloader, optimizer, config, batch_accum_num):
         loss.backward()
         total_loss += loss.item()
 
+        tokens_processed += B * T
         if batch_num % batch_accum_num == 0:
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             total_norm += norm.item()
             optimizer.step()
             optimizer.zero_grad()
             optimizer_steps += 1
+            if tokens_processed > 1e6:
+                break
 
-    # If there is any leftover loss accumulation
-    # Its effect will be less but it is still okay
-    # We are clipping the gradient anyways
-    if len(dataloader) % batch_accum_num != 0:
-        norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        total_norm += norm.item()
-        optimizer.step()
-        optimizer.zero_grad()
-        optimizer_steps += 1
-
-    return total_loss / optimizer_steps, total_norm / optimizer_steps
+    return total_loss / optimizer_steps, total_norm / optimizer_steps, tokens_processed
 
 
 def val_step(model, dataloader, config):
@@ -78,25 +71,20 @@ def train(
     model,
     optimizer,
     scheduler,
+    train_dataloader,
+    val_dataloader,
     config,
-    num_epochs,
+    max_iter,
     results,
     tokenizer,
     checkpoint_save_path,
     batch_accum_num,
 ):
-    num_shard = len(results["train_losses"]) + 1
-    train_dataloader, val_dataloader = create_dataloaders(config, num_shard=num_shard)
+    val_tokens = len(val_dataloader) * config.batch_size * config.block_size
 
-    total_tokens = (
-        len(train_dataloader) * config.batch_size * config.block_size
-        + len(val_dataloader) * config.batch_size * config.block_size
-    )
-
-    train_loss = val_step(model, train_dataloader, config)
     val_loss = val_step(model, val_dataloader, config)
-    print(f"Continuing from epoch: {len(results['val_losses']) + 1}")
-    print(f"Starting training loss: {train_loss:.4f}, validation loss: {val_loss:.4f}")
+    print(f"Continuing from iteration: {len(results['val_losses']) + 1}")
+    print(f"Validation loss: {val_loss:.4f}")
     print("-" * 100)
 
     if len(results["val_losses"]) == 0:
@@ -105,25 +93,20 @@ def train(
         min_val_loss = min(results["val_losses"])
 
     checkpoint_flag = False
-    for epoch in tqdm(range(num_epochs)):
-        num_shard = len(results["train_losses"]) + 1
-        train_dataloader, val_dataloader = create_dataloaders(
-            config, num_shard=num_shard
-        )
-
+    for i in tqdm(range(max_iter)):
         start = time.perf_counter()
-        train_loss, norm = train_step(
+        train_loss, norm, train_tokens = train_step(
             model, train_dataloader, optimizer, config, batch_accum_num
         )
         val_loss = val_step(model, val_dataloader, config)
         scheduler.step()
         lr = scheduler.get_last_lr()
         end = time.perf_counter()
-        token_per_sec = total_tokens / (end - start)
+        token_per_sec = (train_tokens + val_tokens) / (end - start)
         results["train_losses"].append(train_loss)
         results["val_losses"].append(val_loss)
         print(
-            f"Epoch: {epoch + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
+            f"Iter: {i + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
             + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
         )
 

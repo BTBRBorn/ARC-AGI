@@ -8,8 +8,8 @@ import shutil
 import numpy as np
 import functools
 from concurrent import futures
+from copy import deepcopy
 
-from get_arc_generator import ArcGenerator
 from get_tokenizer import Tokenizer
 from get_augmentor import Augmentor
 
@@ -19,12 +19,22 @@ parser.add_argument("--train_data_path", type=str, default="data/combined")
 parser.add_argument("--val_data_path", type=str, default="data/training")
 parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
 parser.add_argument("--num_shards", type=int, default=10)
+parser.add_argument("--num_repeat_per_shard", type=int, default=10)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--num_workers", type=int, default=10)
 parser.add_argument("--tokenizer_save_path", type=str, default="")
 
 args = parser.parse_args()
 
+def get_tasks(data_path, filelist):
+    # Add data from actual arc tasks
+    tasks = []
+    for i, file in enumerate(filelist):
+        json_path = data_path / file
+        with open(json_path, "r") as fhandle:
+            task = json.load(fhandle)
+        tasks.append(task)
+    return tasks
 
 def create_data(
     output_file_path,
@@ -33,36 +43,28 @@ def create_data(
     is_train,
     rolled,
     augmented,
+    num_repeat,
 ):
     data_path = Path(source_path)
     output_file_path = Path(output_file_path)
     filelist = os.listdir(data_path)
     augmentor = Augmentor()
-    #arc_generator = ArcGenerator(num_repeat=3)
-
-    # Add data from actual arc tasks
-    tasks = []
-    for i, file in enumerate(filelist):
-        json_path = data_path / file
-        with open(json_path, "r") as fhandle:
-            task = json.load(fhandle)
-        tasks.append(task)
-        #if is_train and (i % 20 == 0):
-            #generated_tasks = arc_generator()
-            #tasks.extend(generated_tasks)
 
     data = []
-    for task in tasks:
-        if is_train:
-            task = task["train"]
-            random.shuffle(task)
-        else:
-            task = task["test"]
-        if augmented:
-            augmentor(task)  # In-place change
-        task = tokenizer.encode(task)
-        np_task = np.array(task, dtype=np.uint8)
-        data.append(np_task)
+    tasks = get_tasks(data_path, filelist)
+    for _ in range(num_repeat):
+        copy_tasks = deepcopy(tasks)
+        for task in copy_tasks:
+            if is_train:
+                task = task["train"]
+                random.shuffle(task)
+            else:
+                task = task["test"]
+            if augmented:
+                augmentor(task)  # In-place change
+            task = tokenizer.encode(task)
+            np_task = np.array(task, dtype=np.uint8)
+            data.append(np_task)
 
     random.shuffle(data)
     data = np.concatenate(data)
@@ -94,6 +96,7 @@ if __name__ == "__main__":
         is_train=True,
         rolled=True,
         augmented=True,
+        num_repeat=args.num_repeat_per_shard,
     )
 
     training_file_paths = [
@@ -107,10 +110,11 @@ if __name__ == "__main__":
     create_data(
         source_path=VAL_DATA_PATH,
         tokenizer=tokenizer,
-        output_file_path=PROCESSED_DATA_PATH / "validation.npy",
+        output_file_path=PROCESSED_DATA_PATH / "validation_1.npy",
         is_train=False,
         rolled=False,
         augmented=False,
+        num_repeat=1,
     )
 
     if args.tokenizer_save_path:

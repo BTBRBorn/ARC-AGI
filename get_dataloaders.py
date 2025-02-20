@@ -2,35 +2,78 @@ from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 import torch
 import numpy as np
+import os
 
 
 class CustomDataset(Dataset):
-    def __init__(self, data_path, block_size):
-        self.data = np.load(Path(data_path), mmap_mode="r")
+    def __init__(self, data_path: Path, block_size: int, is_train: bool):
         self.block_size = block_size
+        self.data_path = data_path
+        if is_train:
+            self.filelist = [file for file in os.listdir(data_path) if "training" in file]
+        else:
+            self.filelist = [file for file in os.listdir(data_path) if "validation" in file]
+
+        self.meta_data = {}
+        self.populate_meta_data()
+
+
+    def populate_meta_data(self):
+        for file in self.filelist:
+            file_path = self.data_path / file
+            data = np.load(file_path, mmap_mode="r")
+            num_shard = int(str(file_path).split("_")[-1].split(".")[0])
+            self.meta_data[num_shard] = {"file_path": file_path}
+            self.meta_data[num_shard]["num_tokens"] = len(data)
+
+        total_blocks = 0
+        for num_shard in sorted(self.meta_data.keys()):
+            num_blocks = self.get_num_blocks(num_shard)
+            self.meta_data[num_shard]["start_index"] = total_blocks
+            self.meta_data[num_shard]["end_index"] = total_blocks + num_blocks - 1
+            total_blocks += num_blocks
+
+    def get_num_blocks(self, num_shard):
+        num_blocks = self.meta_data[num_shard]["num_tokens"] // self.block_size
+        if self.meta_data[num_shard]["num_tokens"] % self.block_size:
+            return num_blocks + 1
+        else:
+            return num_blocks
 
     def __len__(self):
-        if len(self.data) % self.block_size:
-            return (len(self.data) // self.block_size) + 1
-        else:
-            return len(self.data) // self.block_size
+        last_key = max(self.meta_data.keys())
+        return self.meta_data[last_key]["end_index"] + 1
 
     def __getitem__(self, index):
-        buff = self.data[index * self.block_size : (index + 1) * self.block_size + 1]
+        num_shard = 1
+        try:
+            while not (
+                self.meta_data[num_shard]["start_index"]
+                <= index
+                <= self.meta_data[num_shard]["end_index"]
+            ):
+                num_shard += 1
+        except KeyError:
+            raise IndexError(f'{self.__class__.__name__} index out of range')
+
+        data = np.load(self.meta_data[num_shard]["file_path"], mmap_mode="r")
+        norm_index = index - self.meta_data[num_shard]["start_index"]
+
+        buff = data[
+            norm_index * self.block_size : (norm_index + 1) * self.block_size + 1
+        ]
         if len(buff) != self.block_size + 1:
-            buff = self.data[-self.block_size - 1 :]
+            buff = data[-self.block_size - 1 :]
         buff = torch.tensor(buff, dtype=torch.long)
         x, y = buff[:-1], buff[1:]
         return x, y
 
 
-def create_dataloaders(config, num_shard, train_shuffle=True):
+def create_dataloaders(config, train_shuffle=True):
+    data_path = Path(config.data_path)
 
-    train_data_path = Path(config.data_path) / f"training_{num_shard}.npy"
-    val_data_path = Path(config.data_path) / "validation.npy"
-
-    train_dataset = CustomDataset(train_data_path, config.block_size)
-    val_dataset = CustomDataset(val_data_path, config.block_size)
+    train_dataset = CustomDataset(data_path, config.block_size, is_train=True)
+    val_dataset = CustomDataset(data_path, config.block_size, is_train=False)
 
     train_dataloader = DataLoader(
         train_dataset,

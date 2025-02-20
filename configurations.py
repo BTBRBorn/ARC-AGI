@@ -3,7 +3,6 @@ from pathlib import Path
 
 class Config:
     def __init__(self, args, device):
-        self.num_epochs: int = args.num_epochs
         self.learning_rate: float = args.learning_rate
         self.vocab_size: int = args.vocab_size
         self.block_size: int = args.block_size

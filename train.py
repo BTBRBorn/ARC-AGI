@@ -1,16 +1,19 @@
 from pathlib import Path
 import argparse
+import pickle
+import itertools
+
 import torch
+from get_tokenizer import Tokenizer
+from get_dataloaders import create_dataloaders
 import model
 import engine
 import utils
 from configurations import Config
-import pickle
-from get_tokenizer import Tokenizer
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--num_epochs", type=int, default=10)
+parser.add_argument("--max_iter", type=int, default=100)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
@@ -63,7 +66,8 @@ else:
     optimizer = gpt.configure_optimizer()
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=config.scheduler_iter
+        optimizer,
+        T_max=config.scheduler_iter,
     )
 
     if args.tokenizer_path:
@@ -88,12 +92,17 @@ print(
 if config.compile_model:
     gpt = torch.compile(gpt)
 
+train_dataloader, val_dataloader = create_dataloaders(config)
+train_dataloader_cycle = itertools.cycle(train_dataloader)
+
 results = engine.train(
     model=gpt,
     optimizer=optimizer,
     scheduler=scheduler,
     config=config,
-    num_epochs=args.num_epochs,
+    train_dataloader=train_dataloader_cycle,
+    val_dataloader=val_dataloader,
+    max_iter=args.max_iter,
     results=results,
     tokenizer=tokenizer,
     checkpoint_save_path=Path(args.checkpoint_save_path),

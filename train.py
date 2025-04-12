@@ -14,6 +14,7 @@ from configurations import Config
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--max_iter", type=int, default=100)
+parser.add_argument("--tokens_per_iter", type=int, default=1e6)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
@@ -107,6 +108,7 @@ results = engine.train(
     tokenizer=tokenizer,
     checkpoint_save_path=Path(args.checkpoint_save_path),
     batch_accum_num=args.batch_accum_num,
+    tokens_per_iter=args.tokens_per_iter,
 )
 
 if args.checkpoint_save_path and len(results["val_losses"]) < 300:

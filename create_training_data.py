@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-import os
 import random
 import json
 import pickle
@@ -13,28 +12,24 @@ from copy import deepcopy
 from get_tokenizer import Tokenizer
 from get_augmentor import Augmentor
 
-parser = argparse.ArgumentParser()
 
-parser.add_argument("--train_data_path", type=str, default="data/combined")
-parser.add_argument("--val_data_path", type=str, default="data/training")
-parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
-parser.add_argument("--num_shards", type=int, default=10)
-parser.add_argument("--num_repeat_per_shard", type=int, default=10)
-parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--num_workers", type=int, default=10)
-parser.add_argument("--tokenizer_save_path", type=str, default="")
-
-args = parser.parse_args()
-
-def get_tasks(data_path, filelist):
-    # Add data from actual arc tasks
+def get_tasks(data_path):
     tasks = []
-    for i, file in enumerate(filelist):
-        json_path = data_path / file
-        with open(json_path, "r") as fhandle:
-            task = json.load(fhandle)
-        tasks.append(task)
+    for cur_dir_path, sub_dirs, sub_files in data_path.walk():
+        for file in sub_files:
+            if ".json" in file:
+                file_path = cur_dir_path / file
+            else:
+                continue
+            json_obj = json.loads(file_path.read_text())
+            if "train" in json_obj.keys():
+                tasks.append(json_obj)
+            else:
+                for task in json_obj.values():
+                    if isinstance(task, dict) and "train" in task.keys():
+                        tasks.append(task)
     return tasks
+
 
 def create_data(
     output_file_path,
@@ -47,11 +42,10 @@ def create_data(
 ):
     data_path = Path(source_path)
     output_file_path = Path(output_file_path)
-    filelist = os.listdir(data_path)
     augmentor = Augmentor()
 
     data = []
-    tasks = get_tasks(data_path, filelist)
+    tasks = get_tasks(data_path)
     for _ in range(num_repeat):
         copy_tasks = deepcopy(tasks)
         for task in copy_tasks:
@@ -66,7 +60,8 @@ def create_data(
             np_task = np.array(task, dtype=np.uint8)
             data.append(np_task)
 
-    random.shuffle(data)
+    if is_train:
+        random.shuffle(data)
     data = np.concatenate(data)
 
     if rolled:
@@ -78,33 +73,48 @@ def create_data(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--train_data_path", type=str, default="data/arc-dataset-collection-main")
+    parser.add_argument("--val_data_path", type=str, default="data/training")
+    parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
+    parser.add_argument("--num_shards", type=int, default=10)
+    parser.add_argument("--num_repeat_per_shard", type=int, default=1)
+    parser.add_argument("--vocab_size", type=int, default=16)
+    parser.add_argument("--num_workers", type=int, default=10)
+    parser.add_argument("--tokenizer_save_path", type=str, default="")
+    parser.add_argument("--only_validation_data", type=int, choices={0, 1}, default=0)
+
+    args = parser.parse_args()
     tokenizer = Tokenizer(args.vocab_size)
 
     PROCESSED_DATA_PATH = Path(args.processed_data_path)
     TRAIN_DATA_PATH = Path(args.train_data_path)
     VAL_DATA_PATH = Path(args.val_data_path)
 
-    if PROCESSED_DATA_PATH.exists():
-        shutil.rmtree(PROCESSED_DATA_PATH)
-        PROCESSED_DATA_PATH.mkdir(parents=True)
+    if not args.only_validation_data:
+        if PROCESSED_DATA_PATH.exists():
+            shutil.rmtree(PROCESSED_DATA_PATH)
+            PROCESSED_DATA_PATH.mkdir(parents=True)
 
-    print("Training data is being created.")
-    train_create_data = functools.partial(
-        create_data,
-        source_path=TRAIN_DATA_PATH,
-        tokenizer=tokenizer,
-        is_train=True,
-        rolled=True,
-        augmented=True,
-        num_repeat=args.num_repeat_per_shard,
-    )
+        print("Training data is being created.")
+        train_create_data = functools.partial(
+            create_data,
+            source_path=TRAIN_DATA_PATH,
+            tokenizer=tokenizer,
+            is_train=True,
+            rolled=True,
+            augmented=True,
+            num_repeat=args.num_repeat_per_shard,
+        )
 
-    training_file_paths = [
-        PROCESSED_DATA_PATH / f"training_{i}.npy" for i in range(1, args.num_shards + 1)
-    ]
-    with futures.ProcessPoolExecutor(args.num_workers) as executor:
-        for outfile_path in executor.map(train_create_data, training_file_paths):
-            print(f'File {outfile_path} is created.')
+        training_file_paths = [
+            PROCESSED_DATA_PATH / f"training_{i}.npy"
+            for i in range(1, args.num_shards + 1)
+        ]
+        with futures.ProcessPoolExecutor(args.num_workers) as executor:
+            for outfile_path in executor.map(train_create_data, training_file_paths):
+                print(f"File {outfile_path} is created.")
 
     # Validation data is being created
     create_data(

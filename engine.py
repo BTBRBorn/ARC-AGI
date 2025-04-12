@@ -6,7 +6,7 @@ import utils
 from pathlib import Path
 
 
-def train_step(model, dataloader, optimizer, config, batch_accum_num):
+def train_step(model, dataloader, optimizer, config, batch_accum_num, tokens_per_iter):
     total_loss = 0.0
     total_norm = 0.0
     optimizer_steps = 0
@@ -38,7 +38,7 @@ def train_step(model, dataloader, optimizer, config, batch_accum_num):
             optimizer.step()
             optimizer.zero_grad()
             optimizer_steps += 1
-            if tokens_processed > 1e6:
+            if tokens_processed > tokens_per_iter:
                 break
 
     return total_loss / optimizer_steps, total_norm / optimizer_steps, tokens_processed
@@ -79,8 +79,8 @@ def train(
     tokenizer,
     checkpoint_save_path,
     batch_accum_num,
+    tokens_per_iter,
 ):
-    val_tokens = len(val_dataloader) * config.batch_size * config.block_size
 
     val_loss = val_step(model, val_dataloader, config)
     print(f"Continuing from iteration: {len(results['val_losses']) + 1}")
@@ -96,13 +96,13 @@ def train(
     for i in tqdm(range(max_iter)):
         start = time.perf_counter()
         train_loss, norm, train_tokens = train_step(
-            model, train_dataloader, optimizer, config, batch_accum_num
+            model, train_dataloader, optimizer, config, batch_accum_num, tokens_per_iter
         )
+        end = time.perf_counter()
         val_loss = val_step(model, val_dataloader, config)
         scheduler.step()
         lr = scheduler.get_last_lr()
-        end = time.perf_counter()
-        token_per_sec = (train_tokens + val_tokens) / (end - start)
+        token_per_sec = train_tokens / (end - start)
         results["train_losses"].append(train_loss)
         results["val_losses"].append(val_loss)
         print(

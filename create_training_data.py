@@ -97,6 +97,8 @@ if __name__ == "__main__":
         if PROCESSED_DATA_PATH.exists():
             shutil.rmtree(PROCESSED_DATA_PATH)
             PROCESSED_DATA_PATH.mkdir(parents=True)
+        else:
+            PROCESSED_DATA_PATH.mkdir(parents=True)
 
         print("Training data is being created.")
         train_create_data = functools.partial(

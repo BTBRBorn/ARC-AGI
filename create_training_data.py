@@ -19,7 +19,7 @@ def get_tasks(data_path):
     for cur_dir_path, sub_dirs, sub_files in os.walk(data_path):
         for file in sub_files:
             if ".json" in file:
-                file_path = cur_dir_path / file
+                file_path = Path(cur_dir_path) / file
             else:
                 continue
             json_obj = json.loads(file_path.read_text())

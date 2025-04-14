@@ -8,6 +8,7 @@ import numpy as np
 import functools
 from concurrent import futures
 from copy import deepcopy
+import os
 
 from get_tokenizer import Tokenizer
 from get_augmentor import Augmentor
@@ -15,7 +16,7 @@ from get_augmentor import Augmentor
 
 def get_tasks(data_path):
     tasks = []
-    for cur_dir_path, sub_dirs, sub_files in data_path.walk():
+    for cur_dir_path, sub_dirs, sub_files in os.walk(data_path):
         for file in sub_files:
             if ".json" in file:
                 file_path = cur_dir_path / file
@@ -75,7 +76,7 @@ def create_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--train_data_path", type=str, default="data/arc-dataset-collection-main")
+    parser.add_argument("--train_data_path", type=str, default="data/training")
     parser.add_argument("--val_data_path", type=str, default="data/training")
     parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
     parser.add_argument("--num_shards", type=int, default=10)

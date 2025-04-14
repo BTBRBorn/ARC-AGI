@@ -83,7 +83,7 @@ class Evaluator:
         ]
         task_acc, pixel_acc = [], []
         total_tasks = len(task_paths)
-        for task_number, task_path in enumerate(task_paths):
+        for task_number, task_path in enumerate(task_paths, start=1):
             with open(task_path, "r") as fhandle:
                 task = json.load(fhandle)
 

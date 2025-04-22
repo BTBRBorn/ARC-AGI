@@ -90,14 +90,17 @@ print(
     f"Total number of tokens in every training step: {config.batch_size * args.batch_accum_num * config.block_size}"
 )
 
-if config.compile_model:
-    gpt = torch.compile(gpt)
+if args.compile_model:
+    gpt_compiled = torch.compile(gpt)
+    gpts = (gpt, gpt_compiled)
+else:
+    gpts = (gpt, None)
 
 train_dataloader, val_dataloader = create_dataloaders(config)
 train_dataloader_cycle = itertools.cycle(train_dataloader)
 
 results = engine.train(
-    model=gpt,
+    model=gpts,
     optimizer=optimizer,
     scheduler=scheduler,
     config=config,
@@ -114,7 +117,7 @@ results = engine.train(
 if args.checkpoint_save_path and len(results["val_losses"]) < 300:
     utils.save_checkpoint(
         checkpoint_path=Path(args.checkpoint_save_path),
-        model=gpt,
+        model=gpts[0],
         optimizer=optimizer,
         scheduler=scheduler,
         tokenizer=tokenizer,

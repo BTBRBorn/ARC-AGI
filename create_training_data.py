@@ -76,8 +76,8 @@ def create_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--train_data_path", type=str, default="data/training")
-    parser.add_argument("--val_data_path", type=str, default="data/training")
+    parser.add_argument("--train_data_path", type=str, default="data/ARC-AGI-2-data/training")
+    parser.add_argument("--val_data_path", type=str, default="data/ARC-AGI-2-data/training")
     parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
     parser.add_argument("--num_shards", type=int, default=10)
     parser.add_argument("--num_repeat_per_shard", type=int, default=1)

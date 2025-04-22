@@ -81,6 +81,11 @@ def train(
     batch_accum_num,
     tokens_per_iter,
 ):
+    base_model, model_compiled = model
+    if model_compiled is not None:
+        model = model_compiled
+    else:
+        model = base_model
 
     val_loss = val_step(model, val_dataloader, config)
     print(f"Continuing from iteration: {len(results['val_losses']) + 1}")
@@ -122,7 +127,7 @@ def train(
             checkpoint_flag = False
             utils.save_checkpoint(
                 checkpoint_path=Path(checkpoint_save_path),
-                model=model,
+                model=base_model,
                 optimizer=optimizer,
                 scheduler=scheduler,
                 tokenizer=tokenizer,

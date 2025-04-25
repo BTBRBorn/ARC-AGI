@@ -29,7 +29,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     config = checkpoint["config"]
 
-    gpt = model.GPT(config=config).to(config.device)
+    gpt = model.Transformer(config=config).to(config.device)
 
     gpt.load_state_dict(checkpoint["model_state_dict"])
 

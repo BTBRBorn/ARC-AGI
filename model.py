@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import einops
+from jaxtyping import Int, Float
 
 
 class MLP(nn.Module):
@@ -32,7 +34,11 @@ class MaskedSelfAttention(nn.Module):
         self.register_buffer(
             "tril",
             torch.tril(
-                torch.ones(config.block_size, config.block_size, device=config.device)
+                torch.ones(
+                    config.tokens_block_size,
+                    config.tokens_block_size,
+                    device=config.device,
+                )
             ),
         )
 
@@ -158,3 +164,124 @@ class GPT(nn.Module):
         for block in self.blocks:
             x = block(x, attention_mode)  # (B, T, C) -> (B, T, C)
         return self.f_head(self.ln(x))  # (B, T, vocab_size)
+
+
+class Encoder(nn.Module):
+    def __init__(
+        self,
+        config,
+    ):
+        super().__init__()
+        vocab_size = config.vocab_size
+        self.token_len = config.token_len
+        self.pixel_emb = nn.Embedding(vocab_size, vocab_size)
+        self.ln = nn.LayerNorm(config.vocab_size * self.token_len)
+        self.encode_linear = nn.Linear(
+            config.vocab_size * self.token_len, config.emb_dim
+        )
+
+    def forward(self, x: Int[torch.Tensor, "B T"]) -> torch.Tensor:
+        B, T = x.size()
+        # (B, T) -> (B, T, vocab_size)
+        x = self.pixel_emb(x)
+        x = einops.rearrange(
+            x, "B (T token_len) vocab_size -> B T (token_len vocab_size)", token_len=self.token_len
+        )
+        # (B, T, token_len*vocab_size) -> (B, T, emb_dim)
+        return self.encode_linear(self.ln(x))
+
+
+class Decoder(nn.Module):
+    def __init__(
+        self,
+        config,
+    ):
+        super().__init__()
+        self.token_len = config.token_len
+        self.ln = nn.LayerNorm(config.emb_dim)
+        self.decode_linear = nn.Linear(
+            config.emb_dim, config.vocab_size * self.token_len
+        )
+
+    def forward(self, x: Float[torch.Tensor, "B T C"]) -> torch.Tensor:
+        x = self.ln(x)
+        # (B, T, emb_dim) -> (B, T, token_len*vocab_size)
+        x = self.decode_linear(x)
+        return einops.rearrange(
+            x,
+            "B T (token_len vocab_size) -> B (T token_len) vocab_size",
+            token_len=self.token_len,
+        )
+
+
+class Transformer(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        config = kwargs["config"]
+        self.config = config
+        self.encoder = Encoder(config)
+        self.pte = nn.Embedding(config.tokens_block_size, config.emb_dim)
+        self.blocks = nn.ModuleList(
+            [Block(config=config) for _ in range(config.n_layer)]
+        )
+        self.decoder = Decoder(config)
+        self.ln = nn.LayerNorm(config.vocab_size)
+        self.ln_head = nn.Linear(config.vocab_size, config.vocab_size, bias=False)
+
+        # Weight tying
+        self.ln_head.weight = self.encoder.pixel_emb.weight
+
+        self.register_buffer(
+            "pos_inx", torch.arange(config.tokens_block_size, device=config.device)
+        )
+
+        self.apply(self._weight_init)
+
+    def _weight_init(self, module):
+        if isinstance(module, nn.Linear):
+            std = module.in_features ** (-0.5)
+            if hasattr(module, "RESIDUAL_INIT"):
+                std *= self.config.n_layer ** (-0.5)
+            nn.init.normal_(module.weight, mean=0, std=std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            _, emb_dim = module.weight.size()
+            std = emb_dim ** (-0.5)
+            nn.init.normal_(module.weight, mean=0, std=std)
+
+    def configure_optimizer(self):
+        config = self.config
+
+        optim_groups = [
+            {
+                "params": [p for p in self.parameters() if p.dim() >= 2],
+                "weight_decay": config.weight_decay,
+            },
+            {
+                "params": [p for p in self.parameters() if p.dim() < 2],
+                "weight_decay": 0.0,
+            },
+        ]
+
+        optimizer = torch.optim.AdamW(
+            optim_groups,
+            lr=config.learning_rate,
+            betas=(0.9, 0.95),
+            fused=True,
+        )
+
+        return optimizer
+
+    def forward(self, x: torch.Tensor, attention_mode="flash_attention"):
+        B, T = x.size()
+
+        x = self.encoder(x) + self.pte(
+            self.pos_inx[:self.config.tokens_block_size]
+        )  # (B, tokens_block_size, emb_dim) + (tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
+        for block in self.blocks:
+            x = block(x, attention_mode)  # (B, tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
+        # (B, tokens_block_size, emb_dim) -> (B, T, vocab_size)
+        x = self.decoder(x) 
+        # (B, T, vocab_size) -> (B, T, vocab_size)
+        return self.ln_head(self.ln(x))

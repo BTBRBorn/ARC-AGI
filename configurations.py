@@ -6,6 +6,8 @@ class Config:
         self.learning_rate: float = args.learning_rate
         self.vocab_size: int = args.vocab_size
         self.block_size: int = args.block_size
+        self.token_len: int = args.token_len
+        self.tokens_block_size: int = args.block_size // args.token_len
         self.n_layer: int = args.n_layer
         self.batch_size: int = args.batch_size
         self.head_size: int = args.head_size

@@ -18,13 +18,14 @@ parser.add_argument("--tokens_per_iter", type=int, default=1e6)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
-parser.add_argument("--n_layer", type=int, default=32)
+parser.add_argument("--token_len", type=int, default=8)
+parser.add_argument("--n_layer", type=int, default=16)
 parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--batch_accum_num", type=int, default=1)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
-parser.add_argument("--dataloader_num_workers", type=int, default=2)
+parser.add_argument("--dataloader_num_workers", type=int, default=4)
 parser.add_argument("--compile_model", type=int, choices={0, 1}, default=0)
 parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
@@ -62,7 +63,7 @@ if args.checkpoint_load_path:
 else:
     config = Config(args, device)
 
-    gpt = model.GPT(config=config).to(config.device)
+    gpt = model.Transformer(config=config).to(config.device)
 
     optimizer = gpt.configure_optimizer()
 

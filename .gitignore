@@ -16,6 +16,7 @@ playground.ipynb
 checkpoints/
 test_checkpoints/
 tokenizers/
+results.json
 
 #uv specific
 uv.lock

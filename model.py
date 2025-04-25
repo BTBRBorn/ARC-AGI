@@ -2,7 +2,6 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import einops
-from jaxtyping import Int, Float
 
 
 class MLP(nn.Module):
@@ -172,20 +171,21 @@ class Encoder(nn.Module):
         config,
     ):
         super().__init__()
-        vocab_size = config.vocab_size
         self.token_len = config.token_len
-        self.pixel_emb = nn.Embedding(vocab_size, vocab_size)
+        self.pixel_emb = nn.Embedding(config.vocab_size, config.vocab_size)
         self.ln = nn.LayerNorm(config.vocab_size * self.token_len)
         self.encode_linear = nn.Linear(
             config.vocab_size * self.token_len, config.emb_dim
         )
 
-    def forward(self, x: Int[torch.Tensor, "B T"]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T = x.size()
         # (B, T) -> (B, T, vocab_size)
         x = self.pixel_emb(x)
         x = einops.rearrange(
-            x, "B (T token_len) vocab_size -> B T (token_len vocab_size)", token_len=self.token_len
+            x,
+            "B (T token_len) vocab_size -> B T (token_len vocab_size)",
+            token_len=self.token_len,
         )
         # (B, T, token_len*vocab_size) -> (B, T, emb_dim)
         return self.encode_linear(self.ln(x))
@@ -200,10 +200,12 @@ class Decoder(nn.Module):
         self.token_len = config.token_len
         self.ln = nn.LayerNorm(config.emb_dim)
         self.decode_linear = nn.Linear(
-            config.emb_dim, config.vocab_size * self.token_len
+            config.emb_dim,
+            config.vocab_size * self.token_len,
+            bias=False,
         )
 
-    def forward(self, x: Float[torch.Tensor, "B T C"]) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.ln(x)
         # (B, T, emb_dim) -> (B, T, token_len*vocab_size)
         x = self.decode_linear(x)
@@ -276,12 +278,14 @@ class Transformer(nn.Module):
     def forward(self, x: torch.Tensor, attention_mode="flash_attention"):
         B, T = x.size()
 
-        x = self.encoder(x) + self.pte(
-            self.pos_inx[:self.config.tokens_block_size]
+        x = (
+            self.encoder(x) + self.pte(self.pos_inx[: self.config.tokens_block_size])
         )  # (B, tokens_block_size, emb_dim) + (tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
         for block in self.blocks:
-            x = block(x, attention_mode)  # (B, tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
+            x = block(
+                x, attention_mode
+            )  # (B, tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
         # (B, tokens_block_size, emb_dim) -> (B, T, vocab_size)
-        x = self.decoder(x) 
+        x = self.decoder(x)
         # (B, T, vocab_size) -> (B, T, vocab_size)
         return self.ln_head(self.ln(x))

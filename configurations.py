@@ -3,6 +3,7 @@ from pathlib import Path
 
 class Config:
     def __init__(self, args, device):
+        self.model_type: str = args.model_type
         self.learning_rate: float = args.learning_rate
         self.vocab_size: int = args.vocab_size
         self.block_size: int = args.block_size

@@ -1,5 +1,6 @@
 import torch
-import model
+import model as pt
+import model_transformer as tt
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -29,11 +30,15 @@ def load_checkpoint(checkpoint_path, weight_only=False):
 
     config = checkpoint["config"]
 
-    gpt = model.Transformer(config=config).to(config.device)
+    if config.model_type == "PT":
+        model = pt.GPT(config=config).to(config.device)
+        assert config.token_len == 1, "Pixel based model has to have token_len equal to 1"
+    elif config.model_type == "TT":
+        model = tt.Transformer(config=config).to(config.device)
 
-    gpt.load_state_dict(checkpoint["model_state_dict"])
+    model.load_state_dict(checkpoint["model_state_dict"])
 
-    optimizer = gpt.configure_optimizer()
+    optimizer = model.configure_optimizer()
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -46,7 +51,7 @@ def load_checkpoint(checkpoint_path, weight_only=False):
     results = checkpoint["results"]
 
     return_dict = {
-        "model": gpt,
+        "model": model,
         "optimizer": optimizer,
         "scheduler": scheduler,
         "tokenizer": tokenizer,

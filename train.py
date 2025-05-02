@@ -6,26 +6,29 @@ import itertools
 import torch
 from get_tokenizer import Tokenizer
 from get_dataloaders import create_dataloaders
-import model
+import model as pt
+import model_transformer as tt
 import engine
 import utils
 from configurations import Config
 
 parser = argparse.ArgumentParser()
 
+
+parser.add_argument("--model_type", type=str, choices={"PT", "TT"}, default="PT")
 parser.add_argument("--max_iter", type=int, default=100)
 parser.add_argument("--tokens_per_iter", type=int, default=1e6)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
-parser.add_argument("--block_size", type=int, default=8192)
-parser.add_argument("--token_len", type=int, default=8)
+parser.add_argument("--block_size", type=int, default=2048)
+parser.add_argument("--token_len", type=int, default=4)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--batch_accum_num", type=int, default=1)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
-parser.add_argument("--dataloader_num_workers", type=int, default=4)
+parser.add_argument("--dataloader_num_workers", type=int, default=2)
 parser.add_argument("--compile_model", type=int, choices={0, 1}, default=0)
 parser.add_argument("--attention_mode", type=str, default="flash_attention")
 parser.add_argument("--use_mixed_precision", type=int, choices={0, 1}, default=1)
@@ -50,7 +53,7 @@ if args.checkpoint_load_path:
 
     config = checkpoint_dict["config"]
 
-    gpt = checkpoint_dict["model"]
+    model = checkpoint_dict["model"]
 
     optimizer = checkpoint_dict["optimizer"]
 
@@ -63,9 +66,15 @@ if args.checkpoint_load_path:
 else:
     config = Config(args, device)
 
-    gpt = model.Transformer(config=config).to(config.device)
+    if config.model_type == "PT":
+        model = pt.GPT(config=config).to(config.device)
+        assert config.token_len == 1, (
+            "Pixel based model has to have token_len equal to 1"
+        )
+    elif config.model_type == "TT":
+        model = tt.Transformer(config=config).to(config.device)
 
-    optimizer = gpt.configure_optimizer()
+    optimizer = model.configure_optimizer()
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
@@ -81,27 +90,27 @@ else:
     results = {"train_losses": [], "val_losses": []}
 
 print("Model:")
-print(gpt)
+print(model)
 print("-" * 50)
 print(optimizer)
 print("-" * 50)
-print(f"Total number of parameters: {sum(p.numel() for p in gpt.parameters())}")
+print(f"Total number of parameters: {sum(p.numel() for p in model.parameters())}")
 print("-" * 50)
 print(
     f"Total number of tokens in every training step: {config.batch_size * args.batch_accum_num * config.block_size}"
 )
 
 if args.compile_model:
-    gpt_compiled = torch.compile(gpt)
-    gpts = (gpt, gpt_compiled)
+    model_compiled = torch.compile(model)
+    models = (model, model_compiled)
 else:
-    gpts = (gpt, None)
+    models = (model, None)
 
 train_dataloader, val_dataloader = create_dataloaders(config)
 train_dataloader_cycle = itertools.cycle(train_dataloader)
 
 results = engine.train(
-    model=gpts,
+    model=models,
     optimizer=optimizer,
     scheduler=scheduler,
     config=config,
@@ -118,7 +127,7 @@ results = engine.train(
 if args.checkpoint_save_path and len(results["val_losses"]) < 300:
     utils.save_checkpoint(
         checkpoint_path=Path(args.checkpoint_save_path),
-        model=gpts[0],
+        model=models[0],
         optimizer=optimizer,
         scheduler=scheduler,
         tokenizer=tokenizer,

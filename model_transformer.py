@@ -175,7 +175,7 @@ class Encoder(nn.Module):
         self.config = config
         self.token_len = config.token_len
         self.pixel_emb = nn.Embedding(config.vocab_size, config.vocab_size)
-        self.ln = nn.LayerNorm(config.vocab_size * self.token_len)
+        self.ln = nn.LayerNorm(config.vocab_size * self.token_len, bias=False)
         self.encode_linear = nn.Linear(
             config.vocab_size * self.token_len, config.emb_dim
         )

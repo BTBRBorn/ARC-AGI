@@ -21,7 +21,7 @@ parser.add_argument("--tokens_per_iter", type=int, default=1e6)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
-parser.add_argument("--token_len", type=int, default=4)
+parser.add_argument("--token_len", type=int, default=1)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
 parser.add_argument("--batch_accum_num", type=int, default=1)
@@ -106,7 +106,7 @@ if args.compile_model:
 else:
     models = (model, None)
 
-train_dataloader, val_dataloader = create_dataloaders(config)
+train_dataloader, val_dataloader = create_dataloaders(config, args.data_path)
 train_dataloader_cycle = itertools.cycle(train_dataloader)
 
 results = engine.train(

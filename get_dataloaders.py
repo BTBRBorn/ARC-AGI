@@ -78,8 +78,8 @@ class CustomDataset(Dataset):
         return x, y
 
 
-def create_dataloaders(config, train_shuffle=True):
-    data_path = Path(config.data_path)
+def create_dataloaders(config, data_path, train_shuffle=True):
+    data_path = Path(data_path)
 
     train_dataset = CustomDataset(data_path, config.block_size, is_train=True, token_len = config.token_len)
     val_dataset = CustomDataset(data_path, config.block_size, is_train=False, token_len = config.token_len)

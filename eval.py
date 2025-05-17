@@ -82,9 +82,10 @@ class Evaluator:
         beams = [(context, 0.0, False)]
         end_of_output = tokenizer.special_tokens["end_of_output"]
         with torch.inference_mode():
-            for counter in range(1, tokens_threshold + 1):
+            for _ in range(tokens_threshold):
                 candidates = []
                 not_finished_seqs = [seq for seq, _, finished in beams if not finished]
+                # If every beam ends with end_of_output token break early
                 if len(not_finished_seqs) == 0:
                     break
                 context = torch.cat(not_finished_seqs, dim=0)
@@ -107,21 +108,21 @@ class Evaluator:
                             (
                                 next_seq,
                                 next_score,
-                                True if token == end_of_output else False,
+                                True if token.item() == end_of_output else False,
                             )
                         )
                     i += 1
 
                 beams = sorted(
                     candidates,
-                    key=lambda x: x[1] / counter,
+                    key=lambda x: x[1] / x[0].shape[1],
                     reverse=True,
                 )[:k_beam]
 
         solutions = [
             (
                 tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"],
-                score / counter,
+                score / seq.shape[1],
             )
             for seq, score, finished in beams
             if finished
@@ -216,7 +217,7 @@ class Evaluator:
                     )
 
         overall_acc = (sum(task_acc) / len(task_acc)) * 100
-        overall_pixel_acc = sum(pixel_acc) / len(pixel_acc) * 100
+        overall_pixel_acc = (sum(pixel_acc) / len(pixel_acc)) * 100
 
         print(
             f"Overall accuracy: {overall_acc:.2f}%, "

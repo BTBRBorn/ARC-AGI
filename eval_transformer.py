@@ -5,14 +5,16 @@ import os
 from pathlib import Path
 import json
 import argparse
+import torch.nn.functional as F
 
 
 class Evaluator:
-    def __init__(self, path_to_checkpoint, path_to_tasks):
+    def __init__(self, path_to_checkpoint, path_to_tasks, k_beam):
         self.path_to_checkpoint = Path(path_to_checkpoint)
         self.path_to_tasks = Path(path_to_tasks)
         self.checkpoint = load_checkpoint(path_to_checkpoint)
-        self.token_len = self.checkpoint['config'].token_len
+        self.token_len = self.checkpoint["config"].token_len
+        self.k_beam = k_beam
 
     def _create_context(self, task, test_index, tokenizer):
         new_task = {}
@@ -24,14 +26,80 @@ class Evaluator:
         tokens = tokenizer.encode(new_task["context"])
         return tokens[:-1], len(tokens[:-1])
 
+    @staticmethod
+    def _compute_tokens(log_probs, tokens):
+        pass
+
+    def _beam_search(
+        self,
+        model: torch.nn.Module,
+        context: torch.Tensor,
+        config,
+        tokenizer,
+        tokens_threshold,
+        k_beam,
+    ):
+        # canditates = [(context, score, is_finished)]
+        beams = [(context, 0.0, False)]
+        end_of_output = tokenizer.special_tokens["end_of_output"]
+        with torch.inference_mode():
+            for _ in range(tokens_threshold):
+                candidates = []
+                not_finished_seqs = [seq for seq, _, finished in beams if not finished]
+                # If every beam ends with end_of_output token break early
+                if len(not_finished_seqs) == 0:
+                    break
+                context = torch.cat(not_finished_seqs, dim=0)
+                context = context[:, -config.block_size :]
+                with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
+                    logits = model(context)[:, -config.token_len :, :]
+                log_probs = F.log_softmax(logits, dim=-1).view(config.token_len, -1)
+                top_log_probs, top_tokens = torch.topk(log_probs, k=k_beam, dim=-1)
+
+                #next_tokens = self._compute_tokens(top_log_probs, top_tokens)
+
+                i = 0
+                for seq, score, _ in beams:
+                    if seq[0, -1].item() == end_of_output:
+                        candidates.append((seq, score, True))
+                        continue
+
+                    for log_prob, token in zip(top_log_probs[i], top_tokens[i]):
+                        next_seq = torch.cat((seq, token.view(1, 1)), dim=-1)
+                        next_score = score + log_prob.item()
+                        candidates.append(
+                            (
+                                next_seq,
+                                next_score,
+                                True if token == end_of_output else False,
+                            )
+                        )
+                    i += 1
+
+                beams = sorted(
+                    candidates,
+                    key=lambda x: x[1] / x[0].shape[1],
+                    reverse=True,
+                )[:k_beam]
+
+        solutions = [
+            (
+                tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"],
+                score / seq.shape[1],
+            )
+            for seq, score, finished in beams
+            if finished
+        ]
+
+        return solutions
+
     def _generate_solution(self, model, task, test_index, threshold=2000):
         tokenizer = self.checkpoint["tokenizer"]
         config = self.checkpoint["config"]
         context, con_len = self._create_context(task, test_index, tokenizer)
         buffer_size = self.token_len - (con_len % self.token_len)
-        context[0:0] = [0]*buffer_size
+        context[0:0] = [0] * buffer_size
         context = torch.tensor(context, device=config.device).view(1, -1)
-        #model.eval()
         counter = 0
         with torch.inference_mode():
             with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
@@ -43,20 +111,51 @@ class Evaluator:
                     counter += self.token_len
                     context = context[:, -config.block_size :]
                     logits = model(context)
-                    next_token = torch.argmax(logits[:, -self.token_len:, :], dim=-1)
+                    next_token = torch.argmax(logits[:, -self.token_len :, :], dim=-1)
                     context = torch.cat((context, next_token.view(1, -1)), dim=-1)
                     next_token = next_token.tolist()[0]
                 tokens = context.view(-1).tolist()
         if counter > threshold:
             return None, con_len
-        output_idx = tokens.index(tokenizer.special_tokens['end_of_output'], -self.token_len-1)
-        tokens = tokens[:output_idx+1]
+        output_idx = tokens.index(
+            tokenizer.special_tokens["end_of_output"], -self.token_len - 1
+        )
+        tokens = tokens[: output_idx + 1]
         try:
             tokens = tokenizer.decode(tokens, only_last_output=True)
         except KeyError:
             return None, con_len
-        
+
         return tokens[0]["output"], con_len
+
+    def _generate_solutions(
+        self,
+        model,
+        task,
+        test_index,
+        tokens_threshold=2000,
+    ):
+        tokenizer = self.checkpoint["tokenizer"]
+        config = self.checkpoint["config"]
+        context, con_len = self._create_context(task, test_index, tokenizer)
+        buffer_size = self.token_len - (con_len % self.token_len)
+        context[0:0] = [0] * buffer_size
+        context = torch.tensor(context, device=config.device).view(1, -1)
+        solutions = self._beam_search(
+            model,
+            context,
+            config,
+            tokenizer,
+            tokens_threshold,
+            self.k_beam,
+        )
+
+        if len(solutions) == 0:
+            return None, con_len
+        else:
+            return [
+                s[0] for s in sorted(solutions, key=lambda x: x[1], reverse=True)[:2]
+            ], con_len
 
     def _check_solution(self, output, solution):
         if solution is None:
@@ -94,18 +193,33 @@ class Evaluator:
             with open(task_path, "r") as fhandle:
                 task = json.load(fhandle)
 
+        for task_number, task_path in enumerate(task_paths, start=1):
+            with open(task_path, "r") as fhandle:
+                task = json.load(fhandle)
+
             for tx in range(len(task["test"])):
                 output = task["test"][tx]["output"]
-                ###finetune should be done here###
-                solution, con_len = self._generate_solution(model, task, tx)
-                task_acc.append(self._check_solution(output, solution))
-                pixel_acc.append(self._check_pixel_values(output, solution))
+
+                solutions, con_len = self._generate_solutions(model, task, tx)
+                acc = (
+                    max(self._check_solution(output, s) for s in solutions)
+                    if solutions is not None
+                    else 0.0
+                )
+                p_acc = (
+                    max(self._check_pixel_values(output, s) for s in solutions)
+                    if solutions is not None
+                    else 0.0
+                )
+                task_acc.append(acc)
+                pixel_acc.append(p_acc)
                 if verbose:
                     print(
-                        f"Task {task_number!s:>3s}/{total_tasks} test {tx + 1}, " 
+                        f"Task {task_number!s:>3s}/{total_tasks} test {tx + 1}, "
                         + f"context length: {con_len!s:>4s}, task solved: {task_acc[-1]}, "
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
+
 
         overall_acc = (sum(task_acc) / len(task_acc)) * 100
         overall_pixel_acc = sum(pixel_acc) / len(pixel_acc) * 100
@@ -122,8 +236,9 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", type=str)
     parser.add_argument("--tasks_path", type=str)
     parser.add_argument("--verbose", type=int, choices={0, 1}, default=1)
+    parser.add_argument("--k_beam", type=int, default=1)
 
     args = parser.parse_args()
 
-    evaluator = Evaluator(args.checkpoint_path, args.tasks_path)
+    evaluator = Evaluator(args.checkpoint_path, args.tasks_path, args.k_beam)
     evaluator.evaluate(verbose=bool(args.verbose))

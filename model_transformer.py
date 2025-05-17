@@ -101,71 +101,6 @@ class Block(nn.Module):
         return x
 
 
-class GPT(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        config = kwargs["config"]
-        self.config = config
-        self.wte = nn.Embedding(config.vocab_size, config.emb_dim)
-        self.pte = nn.Embedding(config.block_size, config.emb_dim)
-        self.blocks = nn.ModuleList(
-            [Block(config=config) for _ in range(config.n_layer)]
-        )
-        self.ln = nn.LayerNorm(config.emb_dim)
-        self.f_head = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
-
-        self.register_buffer(
-            "pos_inx", torch.arange(config.block_size, device=config.device)
-        )
-
-        self.f_head.weight = self.wte.weight
-        assert id(self.f_head.weight) == id(self.wte.weight)
-
-        self.apply(self._weight_init)
-
-    def _weight_init(self, module):
-        if isinstance(module, nn.Linear):
-            std = module.in_features ** (-0.5)
-            if hasattr(module, "RESIDUAL_INIT"):
-                std *= self.config.n_layer ** (-0.5)
-            nn.init.normal_(module.weight, mean=0, std=std)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            std = self.config.emb_dim ** (-0.5)
-            nn.init.normal_(module.weight, mean=0, std=std)
-
-    def configure_optimizer(self):
-        config = self.config
-
-        optim_groups = [
-            {
-                "params": [p for p in self.parameters() if p.dim() >= 2],
-                "weight_decay": config.weight_decay,
-            },
-            {
-                "params": [p for p in self.parameters() if p.dim() < 2],
-                "weight_decay": 0.0,
-            },
-        ]
-
-        optimizer = torch.optim.AdamW(
-            optim_groups,
-            lr=config.learning_rate,
-            betas=(0.9, 0.95),
-            fused=True,
-        )
-
-        return optimizer
-
-    def forward(self, x: torch.Tensor, attention_mode="flash_attention"):
-        B, T = x.size()
-        x = self.wte(x) + self.pte(self.pos_inx[:T])  # (B, T, C) + (T, C) -> (B, T, C)
-        for block in self.blocks:
-            x = block(x, attention_mode)  # (B, T, C) -> (B, T, C)
-        return self.f_head(self.ln(x))  # (B, T, vocab_size)
-
-
 class Encoder(nn.Module):
     def __init__(
         self,
@@ -173,24 +108,20 @@ class Encoder(nn.Module):
     ):
         super().__init__()
         self.config = config
+        self.pixel_emb_dim = config.emb_dim // config.token_len
         self.token_len = config.token_len
-        self.pixel_emb = nn.Embedding(config.vocab_size, config.vocab_size)
-        self.ln = nn.LayerNorm(config.vocab_size * self.token_len, bias=False)
-        self.encode_linear = nn.Linear(
-            config.vocab_size * self.token_len, config.emb_dim
-        )
+        self.pixel_emb = nn.Embedding(config.vocab_size, self.pixel_emb_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # (B, T) -> (B, T, vocab_size)
+        # (B, T) -> (B, T, pixel_emb_dim)
         x = self.pixel_emb(x)
 
         x = einops.rearrange(
             x,
-            "B (T token_len) vocab_size -> B T (token_len vocab_size)",
+            "B (T token_len) pixel_emb_dim -> B T (token_len pixel_emb_dim)",
             token_len=self.token_len,
         )
-        # (B, T, token_len*vocab_size) -> (B, T, emb_dim)
-        return self.encode_linear(self.ln(x))
+        return x
 
 
 class Decoder(nn.Module):
@@ -203,17 +134,17 @@ class Decoder(nn.Module):
         self.ln = nn.LayerNorm(config.emb_dim)
         self.decode_linear = nn.Linear(
             config.emb_dim,
-            config.vocab_size * self.token_len,
+            config.emb_dim,
             bias=False,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.ln(x)
-        # (B, T, emb_dim) -> (B, T, token_len*vocab_size)
+        # (B, T, emb_dim) -> (B, T, token_len*pixel_emb_dim)
         x = self.decode_linear(x)
         return einops.rearrange(
             x,
-            "B T (token_len vocab_size) -> B (T token_len) vocab_size",
+            "B T (token_len pixel_emb_dim) -> B (T token_len) pixel_emb_dim",
             token_len=self.token_len,
         )
 
@@ -229,8 +160,8 @@ class Transformer(nn.Module):
             [Block(config=config) for _ in range(config.n_layer)]
         )
         self.decoder = Decoder(config)
-        self.ln = nn.LayerNorm(config.vocab_size)
-        self.ln_head = nn.Linear(config.vocab_size, config.vocab_size, bias=False)
+        self.ln = nn.LayerNorm(config.pixel_emb_dim)
+        self.ln_head = nn.Linear(config.pixel_emb_dim, config.vocab_size, bias=False)
 
         # Weight tying
         self.ln_head.weight = self.encoder.pixel_emb.weight

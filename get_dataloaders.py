@@ -12,6 +12,7 @@ class CustomDataset(Dataset):
         self.block_size = block_size
         self.data_path = data_path
         self.token_len = token_len
+        self.y_indices = torch.arange(token_len, block_size+1, step=token_len)
         if is_train:
             self.filelist = [
                 file for file in os.listdir(data_path) if "training" in file
@@ -67,13 +68,13 @@ class CustomDataset(Dataset):
 
         buff = data[
             norm_index * self.block_size : (norm_index + 1) * self.block_size
-            + self.token_len
+            + 1
         ]
 
-        if len(buff) != self.block_size + self.token_len:
-            buff = data[-self.block_size - self.token_len :]
+        if len(buff) != self.block_size + 1:
+            buff = data[-self.block_size - 1 :]
         buff = torch.tensor(buff, dtype=torch.long)
-        x, y = buff[: -self.token_len], buff[self.token_len :]
+        x, y = buff[: -1], buff[self.y_indices]
 
         return x, y
 

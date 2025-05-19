@@ -105,10 +105,11 @@ class Encoder(nn.Module):
     def __init__(
         self,
         config,
+        pixel_emb_dim
     ):
         super().__init__()
         self.config = config
-        self.pixel_emb_dim = config.emb_dim // config.token_len
+        self.pixel_emb_dim = pixel_emb_dim
         self.token_len = config.token_len
         self.pixel_emb = nn.Embedding(config.vocab_size, self.pixel_emb_dim)
 
@@ -121,6 +122,7 @@ class Encoder(nn.Module):
             "B (T token_len) pixel_emb_dim -> B T (token_len pixel_emb_dim)",
             token_len=self.token_len,
         )
+
         return x
 
 
@@ -128,25 +130,23 @@ class Decoder(nn.Module):
     def __init__(
         self,
         config,
+        pixel_emb_dim,
     ):
         super().__init__()
         self.token_len = config.token_len
+        self.pixel_emb_dim = pixel_emb_dim
         self.ln = nn.LayerNorm(config.emb_dim)
         self.decode_linear = nn.Linear(
             config.emb_dim,
-            config.emb_dim,
+            self.pixel_emb_dim,
             bias=False,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.ln(x)
-        # (B, T, emb_dim) -> (B, T, token_len*pixel_emb_dim)
+        # (B, T, emb_dim) -> (B, T, vocab_size)
         x = self.decode_linear(x)
-        return einops.rearrange(
-            x,
-            "B T (token_len pixel_emb_dim) -> B (T token_len) pixel_emb_dim",
-            token_len=self.token_len,
-        )
+        return x
 
 
 class Transformer(nn.Module):
@@ -154,14 +154,16 @@ class Transformer(nn.Module):
         super().__init__()
         config = kwargs["config"]
         self.config = config
-        self.encoder = Encoder(config)
+        assert (config.emb_dim % config.token_len) == 0
+        self.pixel_emb_dim = config.emb_dim // config.token_len
+        self.encoder = Encoder(config, self.pixel_emb_dim)
         self.pte = nn.Embedding(config.tokens_block_size, config.emb_dim)
         self.blocks = nn.ModuleList(
             [Block(config=config) for _ in range(config.n_layer)]
         )
-        self.decoder = Decoder(config)
-        self.ln = nn.LayerNorm(config.pixel_emb_dim)
-        self.ln_head = nn.Linear(config.pixel_emb_dim, config.vocab_size, bias=False)
+        self.decoder = Decoder(config, self.pixel_emb_dim)
+        self.ln = nn.LayerNorm(self.pixel_emb_dim)
+        self.ln_head = nn.Linear(self.pixel_emb_dim, config.vocab_size, bias=False)
 
         # Weight tying
         self.ln_head.weight = self.encoder.pixel_emb.weight
@@ -213,13 +215,11 @@ class Transformer(nn.Module):
 
         x = (
             self.encoder(x)
-            + self.pte(self.pos_inx[: math.ceil(T / self.config.token_len)])
+            + self.pte(self.pos_inx[: T // self.config.token_len])
         )  # (B, tokens_block_size, emb_dim) + (tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
         for block in self.blocks:
             x = block(
                 x, attention_mode
             )  # (B, tokens_block_size, emb_dim) -> (B, tokens_block_size, emb_dim)
-        # (B, tokens_block_size, emb_dim) -> (B, T, vocab_size)
-        x = self.decoder(x)
-        # (B, T, vocab_size) -> (B, T, vocab_size)
-        return self.ln_head(self.ln(x))
+        x = self.decoder(x) # (B, tokens_block_size, emb_dim) -> (B, tokens_block_size, pixel_emb_dim)
+        return self.ln_head(self.ln(x)) # (B, tokens_block_size, pixel_emb_dim) -> (B, tokens_block_size, vocab_size)

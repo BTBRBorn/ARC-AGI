@@ -13,6 +13,7 @@ class Evaluator:
         self.path_to_checkpoint = Path(path_to_checkpoint)
         self.path_to_tasks = Path(path_to_tasks)
         self.checkpoint = load_checkpoint(path_to_checkpoint)
+        self.config = self.checkpoint["config"]
         self.token_len = self.checkpoint["config"].token_len
         self.k_beam = k_beam
 
@@ -25,73 +26,6 @@ class Evaluator:
         new_task["context"].append(test_input)
         tokens = tokenizer.encode(new_task["context"])
         return tokens[:-1], len(tokens[:-1])
-
-    @staticmethod
-    def _compute_tokens(log_probs, tokens):
-        pass
-
-    def _beam_search(
-        self,
-        model: torch.nn.Module,
-        context: torch.Tensor,
-        config,
-        tokenizer,
-        tokens_threshold,
-        k_beam,
-    ):
-        # canditates = [(context, score, is_finished)]
-        beams = [(context, 0.0, False)]
-        end_of_output = tokenizer.special_tokens["end_of_output"]
-        with torch.inference_mode():
-            for _ in range(tokens_threshold):
-                candidates = []
-                not_finished_seqs = [seq for seq, _, finished in beams if not finished]
-                # If every beam ends with end_of_output token break early
-                if len(not_finished_seqs) == 0:
-                    break
-                context = torch.cat(not_finished_seqs, dim=0)
-                context = context[:, -config.block_size :]
-                with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
-                    logits = model(context)[:, -config.token_len :, :]
-                log_probs = F.log_softmax(logits, dim=-1).view(config.token_len, -1)
-                top_log_probs, top_tokens = torch.topk(log_probs, k=k_beam, dim=-1)
-
-                #next_tokens = self._compute_tokens(top_log_probs, top_tokens)
-
-                i = 0
-                for seq, score, _ in beams:
-                    if seq[0, -1].item() == end_of_output:
-                        candidates.append((seq, score, True))
-                        continue
-
-                    for log_prob, token in zip(top_log_probs[i], top_tokens[i]):
-                        next_seq = torch.cat((seq, token.view(1, 1)), dim=-1)
-                        next_score = score + log_prob.item()
-                        candidates.append(
-                            (
-                                next_seq,
-                                next_score,
-                                True if token == end_of_output else False,
-                            )
-                        )
-                    i += 1
-
-                beams = sorted(
-                    candidates,
-                    key=lambda x: x[1] / x[0].shape[1],
-                    reverse=True,
-                )[:k_beam]
-
-        solutions = [
-            (
-                tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"],
-                score / seq.shape[1],
-            )
-            for seq, score, finished in beams
-            if finished
-        ]
-
-        return solutions
 
     def _generate_solution(self, model, task, test_index, threshold=2000):
         tokenizer = self.checkpoint["tokenizer"]
@@ -128,6 +62,77 @@ class Evaluator:
 
         return tokens[0]["output"], con_len
 
+    def _add_next_token(self, seq: torch.Tensor, next_token: torch.Tensor):
+        tokenizer = self.checkpoint['tokenizer']
+        context_token = tokenizer.special_tokens['context_indicator']
+        seq = torch.cat((seq, next_token.view(1, 1)), dim=-1)
+        if seq[0, 0].item() == context_token:
+            buffer = torch.tensor([[0] * self.token_len], device=self.config.device)
+            seq = torch.cat((buffer, seq), dim=-1)
+        seq = seq[:, 1:]
+        return seq
+
+    def _beam_search(
+        self,
+        model: torch.nn.Module,
+        context: torch.Tensor,
+        config,
+        tokenizer,
+        tokens_threshold,
+        k_beam,
+    ):
+        # canditates = [(context, score, is_finished)]
+        beams = [(context, 0.0, False)]
+        end_of_output = tokenizer.special_tokens["end_of_output"]
+        with torch.inference_mode():
+            for _ in range(tokens_threshold):
+                candidates = []
+                not_finished_seqs = [seq for seq, _, finished in beams if not finished]
+                # If every beam ends with end_of_output token break early
+                if len(not_finished_seqs) == 0:
+                    break
+                context = torch.cat(not_finished_seqs, dim=0)
+                context = context[:, -config.block_size :]
+                with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
+                    logits = model(context)[:, -1, :]
+                log_probs = F.log_softmax(logits, dim=-1)
+                top_log_probs, top_tokens = torch.topk(log_probs, k=k_beam, dim=-1)
+
+                i = 0
+                for seq, score, _ in beams:
+                    if seq[0, -1].item() == end_of_output:
+                        candidates.append((seq, score, True))
+                        continue
+
+                    for log_prob, token in zip(top_log_probs[i], top_tokens[i]):
+                        next_seq = self._add_next_token(seq, token)
+                        next_score = score + log_prob.item()
+                        candidates.append(
+                            (
+                                next_seq,
+                                next_score,
+                                True if token.item() == end_of_output else False,
+                            )
+                        )
+                    i += 1
+
+                beams = sorted(
+                    candidates,
+                    key=lambda x: x[1] / x[0].shape[1],
+                    reverse=True,
+                )[:k_beam]
+
+        solutions = [
+            (
+                tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"],
+                score / seq.shape[1],
+            )
+            for seq, score, finished in beams
+            if finished
+        ]
+
+        return solutions
+
     def _generate_solutions(
         self,
         model,
@@ -150,16 +155,11 @@ class Evaluator:
             self.k_beam,
         )
 
-        if len(solutions) == 0:
-            return None, con_len
-        else:
-            return [
-                s[0] for s in sorted(solutions, key=lambda x: x[1], reverse=True)[:2]
-            ], con_len
+        return [
+            s[0] for s in sorted(solutions, key=lambda x: x[1], reverse=True)[:2]
+        ], con_len
 
     def _check_solution(self, output, solution):
-        if solution is None:
-            return False
         return output == solution
 
     def _is_2d_array(self, array):
@@ -167,8 +167,6 @@ class Evaluator:
         return len(lengths) == 1
 
     def _check_pixel_values(self, output, solution):
-        if solution is None:
-            return 0.0
         if self._is_2d_array(solution) and (
             len(output) == len(solution) and len(output[0]) == len(solution[0])
         ):
@@ -203,12 +201,12 @@ class Evaluator:
                 solutions, con_len = self._generate_solutions(model, task, tx)
                 acc = (
                     max(self._check_solution(output, s) for s in solutions)
-                    if solutions is not None
+                    if solutions
                     else 0.0
                 )
                 p_acc = (
                     max(self._check_pixel_values(output, s) for s in solutions)
-                    if solutions is not None
+                    if solutions
                     else 0.0
                 )
                 task_acc.append(acc)
@@ -220,9 +218,8 @@ class Evaluator:
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-
         overall_acc = (sum(task_acc) / len(task_acc)) * 100
-        overall_pixel_acc = sum(pixel_acc) / len(pixel_acc) * 100
+        overall_pixel_acc = (sum(pixel_acc) / len(pixel_acc)) * 100
 
         print(
             f"Overall accuracy: {overall_acc:.2f}%, "

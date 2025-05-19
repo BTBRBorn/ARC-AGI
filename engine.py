@@ -16,6 +16,9 @@ def train_step(model, dataloader, optimizer, config, batch_accum_num, tokens_per
     for batch_num, (x, y) in enumerate(dataloader, start=1):
         x, y = x.to(config.device), y.to(config.device)
         B, T = x.size()
+        num_tokens = T
+        if config.model_type == "TT":
+            T = T // config.token_len
         if config.use_mixed_precision:
             with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
                 logits = model(x, config.attention_mode)
@@ -31,7 +34,7 @@ def train_step(model, dataloader, optimizer, config, batch_accum_num, tokens_per
         loss.backward()
         total_loss += loss.item()
 
-        tokens_processed += B * T
+        tokens_processed += B * num_tokens
         if batch_num % batch_accum_num == 0:
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             total_norm += norm.item()
@@ -51,6 +54,8 @@ def val_step(model, dataloader, config):
         for x, y in dataloader:
             x, y = x.to(config.device), y.to(config.device)
             B, T = x.size()
+            if config.model_type == "TT":
+                T = T // config.token_len
             if config.use_mixed_precision:
                 with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
                     logits = model(x, config.attention_mode)

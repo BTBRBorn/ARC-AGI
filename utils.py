@@ -25,26 +25,29 @@ def save_checkpoint(
     )
 
 
-def load_checkpoint(checkpoint_path, weight_only=False):
+def load_checkpoint(checkpoint_path, with_model=True, weight_only=False):
     checkpoint = torch.load(Path(checkpoint_path), weights_only=weight_only)
 
     config = checkpoint["config"]
 
-    if config.model_type == "PT":
-        model = pt.GPT(config=config).to(config.device)
-        assert config.token_len == 1, "Pixel based model has to have token_len equal to 1"
-    elif config.model_type == "TT":
-        model = tt.Transformer(config=config).to(config.device)
+    if with_model:
+        if config.model_type == "PT":
+            model = pt.GPT(config=config).to(config.device)
+            assert config.token_len == 1, "Pixel based model has to have token_len equal to 1"
+        elif config.model_type == "TT":
+            model = tt.Transformer(config=config).to(config.device)
 
-    model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"])
 
-    optimizer = model.configure_optimizer()
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer = model.configure_optimizer()
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=config.scheduler_iter
-    )
-    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=config.scheduler_iter
+        )
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+    else:
+        model, optimizer, scheduler = None, None, None
 
     tokenizer = checkpoint["tokenizer"]
 

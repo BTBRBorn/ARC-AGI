@@ -7,10 +7,10 @@ class MLP(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         config = kwargs["config"]
-        self.e_proj = nn.Linear(config.emb_dim, 4 * config.emb_dim)
+        self.e_proj = nn.Linear(config.emb_dim, 4 * config.emb_dim, bias=False)
         self.gelu = nn.GELU()
 
-        self.c_proj = nn.Linear(config.emb_dim * 4, config.emb_dim)
+        self.c_proj = nn.Linear(config.emb_dim * 4, config.emb_dim, bias=False)
         assert not hasattr(self.c_proj, "RESIDUAL_INIT")
         self.c_proj.RESIDUAL_INIT = 1
 
@@ -25,7 +25,7 @@ class MaskedSelfAttention(nn.Module):
         self.config = config
         self.QKV = nn.Linear(config.emb_dim, 3 * config.emb_dim, bias=False)
 
-        self.proj = nn.Linear(config.emb_dim, config.emb_dim)
+        self.proj = nn.Linear(config.emb_dim, config.emb_dim, bias=False)
         assert not hasattr(self.proj, "RESIDUAL_INIT")
         self.proj.RESIDUAL_INIT = 1
 
@@ -88,9 +88,9 @@ class Block(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         config = kwargs["config"]
-        self.ln1 = nn.LayerNorm(config.emb_dim)
+        self.ln1 = nn.LayerNorm(config.emb_dim, bias=False)
         self.msa = MaskedSelfAttention(config=config)
-        self.ln2 = nn.LayerNorm(config.emb_dim)
+        self.ln2 = nn.LayerNorm(config.emb_dim, bias=False)
         self.mlp = MLP(config=config)
 
     def forward(self, x: torch.Tensor, attention_mode):
@@ -109,7 +109,7 @@ class GPT(nn.Module):
         self.blocks = nn.ModuleList(
             [Block(config=config) for _ in range(config.n_layer)]
         )
-        self.ln = nn.LayerNorm(config.emb_dim)
+        self.ln = nn.LayerNorm(config.emb_dim, bias=False)
         self.f_head = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
 
         self.register_buffer(
@@ -126,12 +126,12 @@ class GPT(nn.Module):
             std = module.in_features ** (-0.5)
             if hasattr(module, "RESIDUAL_INIT"):
                 std *= self.config.n_layer ** (-0.5)
-            nn.init.normal_(module.weight, mean=0, std=std)
+            nn.init.trunc_normal_(module.weight, mean=0, std=std)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             std = self.config.emb_dim ** (-0.5)
-            nn.init.normal_(module.weight, mean=0, std=std)
+            nn.init.trunc_normal_(module.weight, mean=0, std=std)
 
     def configure_optimizer(self):
         config = self.config
@@ -150,7 +150,7 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(
             optim_groups,
             lr=config.learning_rate,
-            betas=(0.9, 0.95),
+            betas=(0.9, 0.99),
             fused=True,
         )
 

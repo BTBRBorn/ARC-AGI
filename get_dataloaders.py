@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, DistributedSampler
 from pathlib import Path
 import torch
 import numpy as np
@@ -85,12 +85,14 @@ def create_dataloaders(config, data_path, train_shuffle=True):
     train_dataset = CustomDataset(data_path, config.block_size, is_train=True, token_len = config.token_len)
     val_dataset = CustomDataset(data_path, config.block_size, is_train=False, token_len = config.token_len)
 
+    sampler = DistributedSampler(train_dataset, shuffle=True)
+
     train_dataloader = DataLoader(
         train_dataset,
         config.batch_size,
-        shuffle=train_shuffle,
         num_workers=config.dataloader_num_workers,
         pin_memory=True,
+        sampler=sampler,
     )
     val_dataloader = DataLoader(
         val_dataset,

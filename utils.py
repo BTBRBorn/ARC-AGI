@@ -25,17 +25,18 @@ def save_checkpoint(
     )
 
 
-def load_checkpoint(checkpoint_path, with_model=True, weight_only=False):
+def load_checkpoint(checkpoint_path, device, with_model=True, weight_only=False):
+
     checkpoint = torch.load(Path(checkpoint_path), weights_only=weight_only)
 
     config = checkpoint["config"]
 
     if with_model:
         if config.model_type == "PT":
-            model = pt.GPT(config=config).to(config.device)
+            model = pt.GPT(config=config, device=device).to(device)
             assert config.token_len == 1, "Pixel based model has to have token_len equal to 1"
         elif config.model_type == "TT":
-            model = tt.Transformer(config=config).to(config.device)
+            model = tt.Transformer(config=config).to(device)
 
         model.load_state_dict(checkpoint["model_state_dict"])
 

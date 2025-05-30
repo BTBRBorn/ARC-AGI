@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 class Config:
-    def __init__(self, args, device):
+    def __init__(self, args):
         self.model_type: str = args.model_type
         self.learning_rate: float = args.learning_rate
         self.vocab_size: int = args.vocab_size
@@ -14,7 +14,6 @@ class Config:
         self.head_size: int = args.head_size
         self.n_head: int = args.n_head
         self.emb_dim: int = self.head_size * self.n_head
-        self.device: str = device
         self.dataloader_num_workers: int = args.dataloader_num_workers
         self.compile_model: int = args.compile_model
         self.attention_mode: str = args.attention_mode

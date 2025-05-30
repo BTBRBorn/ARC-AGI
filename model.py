@@ -23,6 +23,7 @@ class MaskedSelfAttention(nn.Module):
         super().__init__()
         config = kwargs["config"]
         self.config = config
+        self.device = kwargs["device"]
         self.QKV = nn.Linear(config.emb_dim, 3 * config.emb_dim, bias=False)
 
         self.proj = nn.Linear(config.emb_dim, config.emb_dim, bias=False)
@@ -35,7 +36,7 @@ class MaskedSelfAttention(nn.Module):
                 torch.ones(
                     config.block_size,
                     config.block_size,
-                    device=config.device,
+                    device=self.device,
                 )
             ),
         )
@@ -88,8 +89,9 @@ class Block(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         config = kwargs["config"]
+        self.device = kwargs["device"]
         self.ln1 = nn.LayerNorm(config.emb_dim, bias=False)
-        self.msa = MaskedSelfAttention(config=config)
+        self.msa = MaskedSelfAttention(config=config, device=self.device)
         self.ln2 = nn.LayerNorm(config.emb_dim, bias=False)
         self.mlp = MLP(config=config)
 
@@ -103,17 +105,18 @@ class GPT(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         config = kwargs["config"]
+        self.device = kwargs['device']
         self.config = config
         self.wte = nn.Embedding(config.vocab_size, config.emb_dim)
         self.pte = nn.Embedding(config.block_size, config.emb_dim)
         self.blocks = nn.ModuleList(
-            [Block(config=config) for _ in range(config.n_layer)]
+            [Block(config=config, device=self.device) for _ in range(config.n_layer)]
         )
         self.ln = nn.LayerNorm(config.emb_dim, bias=False)
         self.f_head = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
 
         self.register_buffer(
-            "pos_inx", torch.arange(config.block_size, device=config.device)
+            "pos_inx", torch.arange(config.block_size, device=self.device)
         )
 
         self.f_head.weight = self.wte.weight
@@ -150,7 +153,7 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(
             optim_groups,
             lr=config.learning_rate,
-            betas=(0.9, 0.99),
+            betas=(0.9, 0.95),
             fused=True,
         )
 

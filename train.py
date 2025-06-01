@@ -100,7 +100,7 @@ else:
 
     models = (base_model, model)
 
-    optimizer = model.module.configure_optimizer()
+    optimizer = utils.configure_optimizer(model)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,

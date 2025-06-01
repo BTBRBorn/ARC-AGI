@@ -5,6 +5,28 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+def configure_optimizer(model):
+    config = model.module.config
+
+    optim_groups = [
+        {
+            "params": [p for p in model.parameters() if p.dim() >= 2],
+            "weight_decay": config.weight_decay,
+        },
+        {
+            "params": [p for p in model.parameters() if p.dim() < 2],
+            "weight_decay": 0.0,
+        },
+    ]
+
+    optimizer = torch.optim.AdamW(
+        optim_groups,
+        lr=config.learning_rate,
+        betas=(0.9, 0.95),
+        fused=True,
+    )
+
+    return optimizer
 
 def save_checkpoint(
     checkpoint_path, model, optimizer, scheduler, tokenizer, config, results
@@ -47,7 +69,7 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
         else:
             model = DDP(base_model, device_ids=[device])
 
-        optimizer = model.module.configure_optimizer()
+        optimizer = configure_optimizer(model)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

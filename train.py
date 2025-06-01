@@ -61,13 +61,15 @@ torch.set_float32_matmul_precision("high")
 
 if args.checkpoint_load_path:
     checkpoint_dict = utils.load_checkpoint(
-        Path(args.checkpoint_load_path), device=device
+        Path(args.checkpoint_load_path),
+        compile_model=args.compile_model,
+        device=device,
     )
 
     config = checkpoint_dict["config"]
 
-    model = checkpoint_dict["model"]
-    base_model = model
+    base_model, model = checkpoint_dict["base_model"], checkpoint_dict["model"]
+    models = (base_model, model)
 
     optimizer = checkpoint_dict["optimizer"]
 
@@ -81,8 +83,7 @@ else:
     config = Config(args)
 
     if config.model_type == "PT":
-        model = pt.GPT(config=config, device=device).to(device)
-        base_model = model
+        base_model = pt.GPT(config=config, device=device).to(device)
 
         assert config.token_len == 1, (
             "Pixel based model has to have token_len equal to 1"
@@ -91,7 +92,15 @@ else:
         model = tt.Transformer(config=config).to(device)
         base_model = model
 
-    optimizer = model.configure_optimizer()
+    if args.compile_model:
+        model_compiled = torch.compile(base_model)
+        model = DDP(model_compiled, device_ids=[device])
+    else:
+        model = DDP(base_model, device_ids=[device])
+
+    models = (base_model, model)
+
+    optimizer = model.module.configure_optimizer()
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
@@ -122,15 +131,6 @@ if master_process:
     )
 
 
-if args.compile_model:
-    model_compiled = torch.compile(base_model)
-    model = DDP(model_compiled, device_ids=[device])
-    models = (base_model, model)
-else:
-    model = DDP(base_model, device_ids=[device])
-    models = (base_model, model)
-
-
 train_dataloader, val_dataloader = create_dataloaders(config, args.data_path)
 train_dataloader_cycle = itertools.cycle(train_dataloader)
 
@@ -152,7 +152,6 @@ results = engine.train(
     device=device,
 )
 
-dist.destroy_process_group()
 
 if args.checkpoint_save_path and len(results["val_losses"]) < 300 and master_process:
     utils.save_checkpoint(
@@ -164,3 +163,5 @@ if args.checkpoint_save_path and len(results["val_losses"]) < 300 and master_pro
         config=config,
         results=results,
     )
+
+dist.destroy_process_group()

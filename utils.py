@@ -3,6 +3,7 @@ import model as pt
 import model_transformer as tt
 from pathlib import Path
 import matplotlib.pyplot as plt
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def save_checkpoint(
@@ -25,7 +26,7 @@ def save_checkpoint(
     )
 
 
-def load_checkpoint(checkpoint_path, device, with_model=True, weight_only=False):
+def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, weight_only=False):
 
     checkpoint = torch.load(Path(checkpoint_path), weights_only=weight_only)
 
@@ -33,14 +34,20 @@ def load_checkpoint(checkpoint_path, device, with_model=True, weight_only=False)
 
     if with_model:
         if config.model_type == "PT":
-            model = pt.GPT(config=config, device=device).to(device)
+            base_model = pt.GPT(config=config, device=device).to(device)
             assert config.token_len == 1, "Pixel based model has to have token_len equal to 1"
         elif config.model_type == "TT":
-            model = tt.Transformer(config=config).to(device)
+            base_model = tt.Transformer(config=config).to(device)
 
-        model.load_state_dict(checkpoint["model_state_dict"])
+        base_model.load_state_dict(checkpoint["model_state_dict"])
 
-        optimizer = model.configure_optimizer()
+        if compile_model:
+            compiled_model = torch.compile(base_model)
+            model = DDP(compiled_model, device_ids=[device])
+        else:
+            model = DDP(base_model, device_ids=[device])
+
+        optimizer = model.module.configure_optimizer()
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -55,6 +62,7 @@ def load_checkpoint(checkpoint_path, device, with_model=True, weight_only=False)
     results = checkpoint["results"]
 
     return_dict = {
+        "base_model": base_model,
         "model": model,
         "optimizer": optimizer,
         "scheduler": scheduler,

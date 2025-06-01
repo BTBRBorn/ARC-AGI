@@ -130,21 +130,17 @@ if master_process:
         f"Total number of tokens in every training step: {config.batch_size * args.batch_accum_num * config.block_size}"
     )
 
-
-train_dataloader, val_dataloader = create_dataloaders(config, args.data_path)
-train_dataloader_cycle = itertools.cycle(train_dataloader)
+train_dataloader, val_dataloader, sampler = create_dataloaders(config, args.data_path)
+sampler.set_epoch(len(results['val_losses']) + 1)
 
 results = engine.train(
-    models=models,
+    model=model,
     optimizer=optimizer,
     scheduler=scheduler,
     config=config,
-    train_dataloader=train_dataloader_cycle,
-    val_dataloader=val_dataloader,
+    train_dataloader=train_dataloader,
     max_iter=args.max_iter,
     results=results,
-    tokenizer=tokenizer,
-    checkpoint_save_path=Path(args.checkpoint_save_path),
     batch_accum_num=args.batch_accum_num,
     tokens_per_iter=args.tokens_per_iter,
     is_master=master_process,
@@ -152,16 +148,22 @@ results = engine.train(
     device=device,
 )
 
-
-if args.checkpoint_save_path and len(results["val_losses"]) < 300 and master_process:
-    utils.save_checkpoint(
-        checkpoint_path=Path(args.checkpoint_save_path),
-        model=base_model,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        tokenizer=tokenizer,
-        config=config,
-        results=results,
+if master_process:
+    val_loss = engine.val_step(
+        model=model, dataloader=val_dataloader, config=config, device=device
     )
+    total_iter = len(results['train_losses']) + 1
+    print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
+    results["val_losses"].append((total_iter, val_loss))
+
+utils.save_checkpoint(
+    checkpoint_path=Path(args.checkpoint_save_path),
+    model=base_model,
+    optimizer=optimizer,
+    scheduler=scheduler,
+    tokenizer=tokenizer,
+    config=config,
+    results=results,
+)
 
 dist.destroy_process_group()

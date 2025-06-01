@@ -1,4 +1,5 @@
-from torch.utils.data import Dataset, DataLoader, DistributedSampler
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
 from pathlib import Path
 import torch
 import numpy as np
@@ -94,6 +95,7 @@ def create_dataloaders(config, data_path, train_shuffle=True):
         pin_memory=True,
         sampler=sampler,
     )
+
     val_dataloader = DataLoader(
         val_dataset,
         config.batch_size,
@@ -102,4 +104,4 @@ def create_dataloaders(config, data_path, train_shuffle=True):
         pin_memory=True,
     )
 
-    return train_dataloader, val_dataloader
+    return train_dataloader, val_dataloader, sampler

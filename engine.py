@@ -1,10 +1,6 @@
 import torch
 import torch.nn.functional as F
-import torch.distributed as dist
-from tqdm.auto import tqdm
 import time
-import utils
-from pathlib import Path
 
 
 def train_step(
@@ -41,11 +37,11 @@ def train_step(
             loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
             loss = loss / batch_accum_num
 
+        loss.backward()
         total_loss += loss.item()
 
         tokens_processed += num_tokens * world_size
         if batch_num % batch_accum_num == 0:
-            loss.backward()
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             total_norm += norm.item()
             optimizer.step()
@@ -53,15 +49,9 @@ def train_step(
             optimizer_steps += 1
             if tokens_processed >= tokens_per_iter:
                 break
-        else:
-            with model.no_sync():
-                loss.backward()
-
-    total_loss = torch.tensor(total_loss, device=device)
-    dist.all_reduce(total_loss, op=dist.ReduceOp.AVG)
 
     return (
-        total_loss.item() / optimizer_steps,
+        total_loss / optimizer_steps,
         total_norm / optimizer_steps,
         tokens_processed,
     )
@@ -93,16 +83,13 @@ def val_step(model, dataloader, config, device):
 
 
 def train(
-    models,
+    model,
     optimizer,
     scheduler,
     train_dataloader,
-    val_dataloader,
     config,
     max_iter,
     results,
-    tokenizer,
-    checkpoint_save_path,
     batch_accum_num,
     tokens_per_iter,
     is_master,
@@ -110,22 +97,10 @@ def train(
     device,
 ):
     assert (batch_accum_num % world_size) == 0
-
-    base_model, model = models
-
     if is_master:
-        val_loss = val_step(model, val_dataloader, config, device)
-        print(f"Continuing from iteration: {len(results['val_losses']) + 1}")
-        print(f"Validation loss: {val_loss:.4f}")
-        print("-" * 100)
+        print(f"Continuing from iteration: {len(results["train_losses"]) + 1}")
 
-    if len(results["val_losses"]) == 0:
-        min_val_loss = 1000
-    else:
-        min_val_loss = min(results["val_losses"])
-
-    checkpoint_flag = False
-    for i in tqdm(range(max_iter)):
+    for i in range(max_iter):
         start = time.perf_counter()
         train_loss, norm, train_tokens = train_step(
             model,
@@ -138,38 +113,16 @@ def train(
             device,
         )
         end = time.perf_counter()
+        scheduler.step()
 
         if is_master:
-            val_loss = val_step(model, val_dataloader, config, device)
-            scheduler.step()
             lr = scheduler.get_last_lr()
             token_per_sec = train_tokens / (end - start)
             results["train_losses"].append(train_loss)
-            results["val_losses"].append(val_loss)
 
             print(
-                f"Iter: {i + 1}, Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, "
+                f"Iter: {i + 1}, Train Loss: {train_loss:.4f}, "
                 + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
             )
-
-            if val_loss < min_val_loss:
-                min_val_loss = val_loss
-                checkpoint_flag = True
-
-            if (
-                checkpoint_save_path
-                and len(results["val_losses"]) >= 300
-                and checkpoint_flag
-            ):
-                checkpoint_flag = False
-                utils.save_checkpoint(
-                    checkpoint_path=Path(checkpoint_save_path),
-                    model=base_model,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    tokenizer=tokenizer,
-                    config=config,
-                    results=results,
-                )
 
     return results

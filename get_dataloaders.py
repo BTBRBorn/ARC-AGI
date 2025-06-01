@@ -86,14 +86,15 @@ def create_dataloaders(config, data_path, train_shuffle=True):
     train_dataset = CustomDataset(data_path, config.block_size, is_train=True, token_len = config.token_len)
     val_dataset = CustomDataset(data_path, config.block_size, is_train=False, token_len = config.token_len)
 
-    sampler = DistributedSampler(train_dataset, shuffle=True)
+    train_sampler = DistributedSampler(train_dataset, shuffle=True)
+    val_sampler = DistributedSampler(val_dataset)
 
     train_dataloader = DataLoader(
         train_dataset,
         config.batch_size,
         num_workers=config.dataloader_num_workers,
         pin_memory=True,
-        sampler=sampler,
+        sampler=train_sampler,
     )
 
     val_dataloader = DataLoader(
@@ -102,6 +103,7 @@ def create_dataloaders(config, data_path, train_shuffle=True):
         shuffle=False,
         num_workers=config.dataloader_num_workers,
         pin_memory=True,
+        sampler=val_sampler,
     )
 
-    return train_dataloader, val_dataloader, sampler
+    return train_dataloader, val_dataloader, train_sampler

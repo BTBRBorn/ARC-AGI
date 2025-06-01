@@ -39,7 +39,7 @@ parser.add_argument("--block_size", type=int, default=2048)
 parser.add_argument("--token_len", type=int, default=1)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
-parser.add_argument("--batch_accum_num", type=int, default=1)
+parser.add_argument("--grad_accum_num", type=int, default=1)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
@@ -127,11 +127,11 @@ if master_process:
     print(f"Total number of parameters: {sum(p.numel() for p in model.parameters())}")
     print("-" * 50)
     print(
-        f"Total number of tokens in every training step: {config.batch_size * args.batch_accum_num * config.block_size}"
+        f"Total number of tokens in every training step: {config.batch_size * args.grad_accum_num * config.block_size}"
     )
 
-train_dataloader, val_dataloader, sampler = create_dataloaders(config, args.data_path)
-sampler.set_epoch(len(results['val_losses']) + 1)
+train_dataloader, val_dataloader, train_sampler = create_dataloaders(config, args.data_path)
+train_sampler.set_epoch(len(results['val_losses']) + 1)
 
 results = engine.train(
     model=model,
@@ -141,29 +141,32 @@ results = engine.train(
     train_dataloader=train_dataloader,
     max_iter=args.max_iter,
     results=results,
-    batch_accum_num=args.batch_accum_num,
+    grad_accum_num=args.grad_accum_num,
     tokens_per_iter=args.tokens_per_iter,
     is_master=master_process,
     world_size=world_size,
     device=device,
 )
 
+
 if master_process:
+
+    utils.save_checkpoint(
+        checkpoint_path=Path(args.checkpoint_save_path),
+        model=base_model,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        tokenizer=tokenizer,
+        config=config,
+        results=results,
+    )
+
     val_loss = engine.val_step(
         model=model, dataloader=val_dataloader, config=config, device=device
     )
+
     total_iter = len(results['train_losses']) + 1
     print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
     results["val_losses"].append((total_iter, val_loss))
-
-utils.save_checkpoint(
-    checkpoint_path=Path(args.checkpoint_save_path),
-    model=base_model,
-    optimizer=optimizer,
-    scheduler=scheduler,
-    tokenizer=tokenizer,
-    config=config,
-    results=results,
-)
 
 dist.destroy_process_group()

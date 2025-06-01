@@ -8,7 +8,7 @@ def train_step(
     dataloader,
     optimizer,
     config,
-    batch_accum_num,
+    grad_accum_num,
     tokens_per_iter,
     world_size,
     device,
@@ -19,7 +19,7 @@ def train_step(
     tokens_processed = 0
     model.train()
     optimizer.zero_grad()
-    batch_accum_num //= world_size
+    grad_accum_num //= world_size
     tokens_per_iter //= world_size
     for batch_num, (x, y) in enumerate(dataloader, start=1):
         x, y = x.to(device), y.to(device)
@@ -31,17 +31,17 @@ def train_step(
                 loss = F.cross_entropy(
                     logits.view(B * T, config.vocab_size), y.view(B * T)
                 )
-                loss = loss / batch_accum_num
+                loss = loss / grad_accum_num
         else:
             logits = model(x, config.attention_mode)
             loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
-            loss = loss / batch_accum_num
+            loss = loss / grad_accum_num
 
         loss.backward()
         total_loss += loss.item()
 
         tokens_processed += num_tokens * world_size
-        if batch_num % batch_accum_num == 0:
+        if batch_num % grad_accum_num == 0:
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             total_norm += norm.item()
             optimizer.step()
@@ -59,13 +59,10 @@ def train_step(
 
 def val_step(model, dataloader, config, device):
     total_loss = 0.0
-    model.eval()
     with torch.inference_mode():
         for x, y in dataloader:
             x, y = x.to(device), y.to(device)
             B, T = x.size()
-            if config.model_type == "TT":
-                T = T // config.token_len
             if config.use_mixed_precision:
                 with torch.autocast(device_type=device, dtype=torch.bfloat16):
                     logits = model(x, config.attention_mode)
@@ -90,15 +87,15 @@ def train(
     config,
     max_iter,
     results,
-    batch_accum_num,
+    grad_accum_num,
     tokens_per_iter,
     is_master,
     world_size,
     device,
 ):
-    assert (batch_accum_num % world_size) == 0
+    assert (grad_accum_num % world_size) == 0
     if is_master:
-        print(f"Continuing from iteration: {len(results["train_losses"]) + 1}")
+        print(f"Continuing from iteration: {len(results['train_losses']) + 1}")
 
     for i in range(max_iter):
         start = time.perf_counter()
@@ -107,11 +104,12 @@ def train(
             train_dataloader,
             optimizer,
             config,
-            batch_accum_num,
+            grad_accum_num,
             tokens_per_iter,
             world_size,
             device,
         )
+
         end = time.perf_counter()
         scheduler.step()
 
@@ -121,7 +119,7 @@ def train(
             results["train_losses"].append(train_loss)
 
             print(
-                f"Iter: {i + 1}, Train Loss: {train_loss:.4f}, "
+                f"Iter: {i + 1}/{max_iter}, Train Loss: {train_loss:.4f}, "
                 + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
             )
 

@@ -124,7 +124,8 @@ if master_process:
     print(f"Total number of parameters: {sum(p.numel() for p in model.parameters())}")
     print("-" * 50)
     print(
-        f"Total number of tokens in every training step: {config.batch_size * args.grad_accum_num * config.block_size}"
+        "Total number of tokens in every training step: "
+        + f"{config.batch_size * args.grad_accum_num * config.block_size * world_size}",
     )
 
 train_dataloader, val_dataloader, train_sampler = create_dataloaders(
@@ -152,12 +153,12 @@ val_loss = engine.val_step(
     model=model, dataloader=val_dataloader, config=config, device=device
 )
 
-total_iter = len(results["train_losses"])
-print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
-results["val_losses"].append((total_iter, val_loss))
+if master_process:
+    total_iter = len(results["train_losses"])
+    print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
+    results["val_losses"].append((total_iter, val_loss))
 
 if master_process and args.checkpoint_save_path:
-
     utils.save_checkpoint(
         checkpoint_path=Path(args.checkpoint_save_path),
         model=base_model,

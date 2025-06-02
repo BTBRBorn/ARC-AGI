@@ -3,6 +3,22 @@ import torch.nn.functional as F
 import time
 import torch.distributed as dist
 
+#Calculate the loss for one batch
+def calculate_loss(model, config, x, y, grad_accum_num=1):
+    B, T = x.size()
+    if config.use_mixed_precision:
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            logits = model(x, config.attention_mode)
+            loss = F.cross_entropy(
+                logits.view(B * T, config.vocab_size), y.view(B * T)
+            )
+            loss = loss / grad_accum_num
+    else:
+        logits = model(x, config.attention_mode)
+        loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
+        loss = loss / grad_accum_num
+
+    return loss
 
 def train_step(
     model,
@@ -20,29 +36,21 @@ def train_step(
     tokens_processed = 0
     model.train()
     optimizer.zero_grad()
-    grad_accum_num //= world_size
     tokens_per_iter //= world_size
     for batch_num, (x, y) in enumerate(dataloader, start=1):
         x, y = x.to(device), y.to(device)
         B, T = x.size()
-        num_tokens = B * T
-        if config.use_mixed_precision:
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                logits = model(x, config.attention_mode)
-                loss = F.cross_entropy(
-                    logits.view(B * T, config.vocab_size), y.view(B * T)
-                )
-                loss = loss / grad_accum_num
-        else:
-            logits = model(x, config.attention_mode)
-            loss = F.cross_entropy(logits.view(B * T, config.vocab_size), y.view(B * T))
-            loss = loss / grad_accum_num
-
-        total_loss += loss.item()
-        loss.backward()
-
-        tokens_processed += num_tokens * world_size
-        if batch_num % grad_accum_num == 0:
+        tokens_processed += B * T
+        if batch_num % grad_accum_num != 0:
+            with model.no_sync():
+                loss = calculate_loss(model, config, x, y, grad_accum_num)
+                total_loss += loss.item()
+                loss.backward()
+        else: 
+            loss = calculate_loss(model, config, x, y, grad_accum_num)
+            total_loss += loss.item()
+            #Sync all the gradients
+            loss.backward()
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             total_norm += norm.item()
             optimizer.step()
@@ -59,28 +67,20 @@ def train_step(
 
 
 def val_step(model, dataloader, config, device):
-    total_loss = 0.0
+    avg_loss = 0.0
     model.eval()
+    iter_steps = 0
     with torch.inference_mode():
         for x, y in dataloader:
+            iter_steps += 1
             x, y = x.to(device), y.to(device)
-            B, T = x.size()
-            if config.use_mixed_precision:
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    logits = model(x, config.attention_mode)
-                    loss = F.cross_entropy(
-                        logits.view(B * T, config.vocab_size), y.view(B * T)
-                    )
-            else:
-                logits = model(x, config.attention_mode)
-                loss = F.cross_entropy(
-                    logits.view(B * T, config.vocab_size), y.view(B * T)
-                )
-            total_loss += loss.detach()
+            loss = calculate_loss(model, config, x, y)
+            avg_loss += loss.detach()
 
-        dist.all_reduce(total_loss, op=dist.ReduceOp.SUM) 
+        avg_loss /= iter_steps
+        dist.all_reduce(avg_loss, op=dist.ReduceOp.AVG) 
 
-    return total_loss / len(dataloader)
+    return avg_loss 
 
 
 def train(

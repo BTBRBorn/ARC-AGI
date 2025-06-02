@@ -162,10 +162,10 @@ if master_process:
     )
 
     val_loss = engine.val_step(
-        model=model, dataloader=val_dataloader, config=config, device=device
+        model=base_model, dataloader=val_dataloader, config=config, device=device
     )
 
-    total_iter = len(results['train_losses']) + 1
+    total_iter = len(results['train_losses'])
     print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
     results["val_losses"].append((total_iter, val_loss))
 

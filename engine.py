@@ -111,15 +111,16 @@ def train(
         )
 
         end = time.perf_counter()
+        dt = end - start
         scheduler.step()
 
         if is_master:
             lr = scheduler.get_last_lr()
-            token_per_sec = train_tokens / (end - start)
+            token_per_sec = train_tokens / dt
             results["train_losses"].append(train_loss)
 
             print(
-                f"Iter: {i + 1}/{max_iter}, Train Loss: {train_loss:.4f}, "
+                f"Iter: {i + 1}/{max_iter}, Train Loss: {train_loss:.4f}, dt: {dt:.4f} s, "
                 + f"tokens/sec: {token_per_sec:.2f}, norm: {norm:.4f}, learning_rate: {lr[0]:.6e}"
             )
 

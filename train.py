@@ -1,7 +1,6 @@
 from pathlib import Path
 import argparse
 import pickle
-import itertools
 import torch
 
 from get_tokenizer import Tokenizer
@@ -17,21 +16,11 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import os
 
-# torchrun will setup rank, local_rank and world_size for us
-dist.init_process_group(backend="nccl")
-ddp_rank = int(os.environ["RANK"])
-ddp_local_rank = int(os.environ["LOCAL_RANK"])
-world_size = int(os.environ["WORLD_SIZE"])
-device = f"cuda:{ddp_local_rank}"
-torch.cuda.set_device(device)
-master_process = ddp_rank == 0
-
-
 parser = argparse.ArgumentParser()
 
 
 parser.add_argument("--model_type", type=str, choices={"PT", "TT"}, default="PT")
-parser.add_argument("--max_iter", type=int, default=100)
+parser.add_argument("--num_iter", type=int, default=100)
 parser.add_argument("--tokens_per_iter", type=int, default=1e6)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
@@ -55,6 +44,14 @@ parser.add_argument("--tokenizer_path", type=str, default="")
 
 args = parser.parse_args()
 
+# torchrun will setup rank, local_rank and world_size for us
+dist.init_process_group(backend="nccl")
+ddp_rank = int(os.environ["RANK"])
+ddp_local_rank = int(os.environ["LOCAL_RANK"])
+world_size = int(os.environ["WORLD_SIZE"])
+device = torch.device(f"cuda:{ddp_local_rank}")
+torch.cuda.set_device(device)
+master_process = ddp_rank == 0
 
 torch.set_float32_matmul_precision("high")
 
@@ -130,8 +127,9 @@ if master_process:
         f"Total number of tokens in every training step: {config.batch_size * args.grad_accum_num * config.block_size}"
     )
 
-train_dataloader, val_dataloader, train_sampler = create_dataloaders(config, args.data_path)
-train_sampler.set_epoch(len(results['val_losses']) + 1)
+train_dataloader, val_dataloader, train_sampler = create_dataloaders(
+    config, args.data_path
+)
 
 results = engine.train(
     model=model,
@@ -139,17 +137,26 @@ results = engine.train(
     scheduler=scheduler,
     config=config,
     train_dataloader=train_dataloader,
-    max_iter=args.max_iter,
+    num_iter=args.num_iter,
     results=results,
     grad_accum_num=args.grad_accum_num,
     tokens_per_iter=args.tokens_per_iter,
     is_master=master_process,
     world_size=world_size,
     device=device,
+    train_sampler=train_sampler,
 )
 
 
-if master_process:
+val_loss = engine.val_step(
+    model=model, dataloader=val_dataloader, config=config, device=device
+)
+
+total_iter = len(results["train_losses"])
+print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
+results["val_losses"].append((total_iter, val_loss))
+
+if master_process and args.checkpoint_save_path:
 
     utils.save_checkpoint(
         checkpoint_path=Path(args.checkpoint_save_path),
@@ -161,12 +168,5 @@ if master_process:
         results=results,
     )
 
-    val_loss = engine.val_step(
-        model=base_model, dataloader=val_dataloader, config=config, device=device
-    )
-
-    total_iter = len(results['train_losses'])
-    print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
-    results["val_losses"].append((total_iter, val_loss))
 
 dist.destroy_process_group()

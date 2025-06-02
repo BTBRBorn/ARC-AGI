@@ -77,7 +77,7 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
         )
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     else:
-        model, optimizer, scheduler = None, None, None
+        base_model, model, optimizer, scheduler = None, None, None, None
 
     tokenizer = checkpoint["tokenizer"]
 

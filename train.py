@@ -20,15 +20,15 @@ parser = argparse.ArgumentParser()
 
 
 parser.add_argument("--model_type", type=str, choices={"PT", "TT"}, default="PT")
-parser.add_argument("--num_iter", type=int, default=100)
-parser.add_argument("--tokens_per_iter", type=int, default=1e6)
+parser.add_argument("--max_iter", type=int, default=100)
+parser.add_argument("--iter_intervals", type=int, default=30)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
 parser.add_argument("--token_len", type=int, default=1)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
-parser.add_argument("--grad_accum_num", type=int, default=1)
+parser.add_argument("--grad_accum_incremental", type=int, default=300)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
@@ -54,7 +54,6 @@ torch.cuda.set_device(device)
 master_process = ddp_rank == 0
 
 torch.set_float32_matmul_precision("high")
-
 
 if args.checkpoint_load_path:
     checkpoint_dict = utils.load_checkpoint(
@@ -110,7 +109,12 @@ else:
     else:
         tokenizer = Tokenizer(config.vocab_size)
 
-    results = {"train_losses": [], "val_losses": []}
+    results = {"train_losses": [], "val_losses": [], "training_run": 1, "grad_accum_num": 1}
+
+train_dataloader, val_dataloader, train_sampler = create_dataloaders(
+    config, args.data_path
+)
+train_sampler.set_epoch(results["training_run"])
 
 if master_process:
     print("-" * 50)
@@ -121,31 +125,32 @@ if master_process:
     print("-" * 50)
     print(optimizer)
     print("-" * 50)
+    print(
+        f"Total number of iterations in training data: {len(train_dataloader) // args.iter_intervals}"
+    )
+    print("-" * 50)
     print(f"Total number of parameters: {sum(p.numel() for p in model.parameters())}")
     print("-" * 50)
     print(
         "Total number of tokens in every training step: "
-        + f"{config.batch_size * args.grad_accum_num * config.block_size * world_size}",
+        + f"{config.batch_size * config.block_size * results["grad_accum_num"] * world_size}",
     )
+    print("-" * 50)
 
-train_dataloader, val_dataloader, train_sampler = create_dataloaders(
-    config, args.data_path
-)
 
 results = engine.train(
     model=model,
     optimizer=optimizer,
     scheduler=scheduler,
-    config=config,
     train_dataloader=train_dataloader,
-    num_iter=args.num_iter,
+    max_iter=args.max_iter,
+    config=config,
     results=results,
-    grad_accum_num=args.grad_accum_num,
-    tokens_per_iter=args.tokens_per_iter,
+    grad_accum_incremental=args.grad_accum_incremental,
+    iter_intervals=args.iter_intervals,
     is_master=master_process,
     world_size=world_size,
     device=device,
-    train_sampler=train_sampler,
 )
 
 

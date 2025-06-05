@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 import time
 import torch.distributed as dist
+from pathlib import Path
+import utils
 
 
 # Calculate the loss for one batch
@@ -63,23 +65,29 @@ def val_step(model, dataloader, config, device):
 
 
 def train(
-    model,
+    models,
     optimizer,
     scheduler,
     train_dataloader,
-    max_iter,
+    val_dataloader,
+    checkpoint_intervals,
     config,
+    tokenizer,
     results,
-    grad_accum_incremental,
-    iter_intervals,
+    checkpoint_save_path,
+    grad_accum_intervals,
+    scheduler_intervals,
     is_master,
     device,
     world_size,
 ):
+    base_model, model = models 
     model.train()
-    total_iter = len(results["train_losses"]) + 1
+    total_iter = len(train_dataloader) // scheduler_intervals
+    current_iter = len(results["train_losses"]) + 1
     grad_accum_num = results["grad_accum_num"]
-    print(f"Continuing training from iteration: {total_iter}")
+    if is_master:
+        print(f"Continuing training from iteration: {current_iter}")
     batch_tokens = config.batch_size * config.block_size * world_size
     total_tokens = 0
     iter_num = 0
@@ -100,43 +108,63 @@ def train(
         )
 
         if is_master:
-            avg_loss += (train_loss * grad_accum_num)
+            avg_loss += (train_loss.item() * grad_accum_num)
             if norm is not None:
-                norms.append(norm)
-        if is_master and not (batch_num % iter_intervals):
-            end = time.perf_counter()
-            dt = end - start
+                norms.append(norm.item())
+
+        if not (batch_num % scheduler_intervals):
             scheduler.step()
-            lr = scheduler.get_last_lr()
-            token_per_sec = total_tokens / dt
-            iter_num += 1
+            if is_master:
+                end = time.perf_counter()
+                dt = end - start
+                lr = scheduler.get_last_lr()
+                token_per_sec = total_tokens / dt
+                iter_num += 1
 
-            # Calculate avg_loss
-            avg_loss /= iter_intervals
-            results["train_losses"].append(avg_loss)
-            # Calculate avg_norm
-            avg_norm = sum(norms) / len(norms)
-            print(
-                f"Iter: {iter_num}/{max_iter}, Train Loss: {avg_loss:.4f}, dt: {dt:.4f} s, "
-                + f"tokens/sec: {token_per_sec:.2f}, norm: {avg_norm:.4f}, learning_rate: {lr[0]:.6e}"
-            )
-            # Re-initialize all variables
-            avg_loss = 0
-            norms = []
-            total_tokens = 0
-            start = time.perf_counter()
+                # Calculate avg_loss
+                avg_loss /= scheduler_intervals
+                results["train_losses"].append(avg_loss)
+                # Calculate avg_norm
+                avg_norm = sum(norms) / len(norms)
+                print(
+                    f"Iter: {iter_num}/{total_iter}, Train Loss: {avg_loss:.4f}, dt: {dt:.4f} seconds, "
+                    + f"tokens/sec: {token_per_sec:.2f}, norm: {avg_norm:.4f}, learning_rate: {lr[0]:.6e}"
+                )
+                # Re-initialize all variables
+                avg_loss = 0
+                norms = []
+                total_tokens = 0
+                start = time.perf_counter()
 
-        #Every grad_accum_incremental's iterations increase batch accumulation by one
-        if not (batch_num % grad_accum_incremental): 
+        #Every grad_accum_intervals iterations increase batch accumulation by one
+        if not (batch_num % grad_accum_intervals): 
             grad_accum_num += 1
+            results["grad_accum_num"] = grad_accum_num
             if is_master:
                 print(f"Gradient accumulation is increased to: {grad_accum_num}")
 
-        #Stop training after max_iter iterations
-        if iter_num == max_iter:
-            break
+        #Checkpoint and validation
+        if not (batch_num % checkpoint_intervals):
 
-    results["training_run"] += 1
-    results["grad_accum_num"] = grad_accum_num
+            val_loss = val_step(
+                model=model, dataloader=val_dataloader, config=config, device=device
+            )
+
+            if is_master:
+                current_iter = len(results['train_losses']) + 1
+                print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
+                results["val_losses"].append((current_iter, val_loss))
+
+            if is_master and checkpoint_save_path:
+                utils.save_checkpoint(
+                    checkpoint_path=Path(checkpoint_save_path),
+                    model=base_model,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    tokenizer=tokenizer,
+                    config=config,
+                    results=results,
+                )
+
 
     return results

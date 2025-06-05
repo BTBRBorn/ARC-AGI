@@ -18,17 +18,17 @@ import os
 
 parser = argparse.ArgumentParser()
 
-
+# All intervals are in batches
 parser.add_argument("--model_type", type=str, choices={"PT", "TT"}, default="PT")
-parser.add_argument("--max_iter", type=int, default=100)
-parser.add_argument("--iter_intervals", type=int, default=30)
+parser.add_argument("--checkpoint_intervals", type=int, default=100)
+parser.add_argument("--scheduler_intervals", type=int, default=30)
+parser.add_argument("--grad_accum_intervals", type=int, default=300)
 parser.add_argument("--learning_rate", type=float, default=3e-4)
 parser.add_argument("--vocab_size", type=int, default=16)
 parser.add_argument("--block_size", type=int, default=2048)
 parser.add_argument("--token_len", type=int, default=1)
 parser.add_argument("--n_layer", type=int, default=32)
 parser.add_argument("--batch_size", type=int, default=4)
-parser.add_argument("--grad_accum_incremental", type=int, default=300)
 parser.add_argument("--head_size", type=int, default=32)
 parser.add_argument("--n_head", type=int, default=8)
 parser.add_argument("--data_path", type=str, default="data/pretraining")
@@ -109,11 +109,17 @@ else:
     else:
         tokenizer = Tokenizer(config.vocab_size)
 
-    results = {"train_losses": [], "val_losses": [], "training_run": 1, "grad_accum_num": 1}
+    results = {
+        "train_losses": [],
+        "val_losses": [],
+        "training_run": 0,
+        "grad_accum_num": 1,
+    }
 
 train_dataloader, val_dataloader, train_sampler = create_dataloaders(
     config, args.data_path
 )
+results["training_run"] += 1
 train_sampler.set_epoch(results["training_run"])
 
 if master_process:
@@ -125,54 +131,31 @@ if master_process:
     print("-" * 50)
     print(optimizer)
     print("-" * 50)
-    print(
-        f"Total number of iterations in training data: {len(train_dataloader) // args.iter_intervals}"
-    )
-    print("-" * 50)
     print(f"Total number of parameters: {sum(p.numel() for p in model.parameters())}")
     print("-" * 50)
     print(
         "Total number of tokens in every training step: "
-        + f"{config.batch_size * config.block_size * results["grad_accum_num"] * world_size}",
+        + f"{config.batch_size * config.block_size * results['grad_accum_num'] * world_size}",
     )
     print("-" * 50)
 
 
 results = engine.train(
-    model=model,
+    models=models,
     optimizer=optimizer,
     scheduler=scheduler,
     train_dataloader=train_dataloader,
-    max_iter=args.max_iter,
+    val_dataloader=val_dataloader,
+    checkpoint_intervals=args.checkpoint_intervals,
     config=config,
+    tokenizer=tokenizer,
     results=results,
-    grad_accum_incremental=args.grad_accum_incremental,
-    iter_intervals=args.iter_intervals,
+    checkpoint_save_path=args.checkpoint_save_path,
+    grad_accum_intervals=args.grad_accum_intervals,
+    scheduler_intervals=args.scheduler_intervals,
     is_master=master_process,
-    world_size=world_size,
     device=device,
+    world_size=world_size,
 )
-
-
-val_loss = engine.val_step(
-    model=model, dataloader=val_dataloader, config=config, device=device
-)
-
-if master_process:
-    total_iter = len(results["train_losses"])
-    print(f"Validation Loss after total iter {total_iter}: {val_loss:.4f}")
-    results["val_losses"].append((total_iter, val_loss))
-
-if master_process and args.checkpoint_save_path:
-    utils.save_checkpoint(
-        checkpoint_path=Path(args.checkpoint_save_path),
-        model=base_model,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        tokenizer=tokenizer,
-        config=config,
-        results=results,
-    )
-
 
 dist.destroy_process_group()

@@ -16,20 +16,56 @@ from get_augmentor import Augmentor
 
 def get_tasks(data_path):
     tasks = []
-    for cur_dir_path, sub_dirs, sub_files in os.walk(data_path):
+    for cur_dir_path, _, sub_files in os.walk(data_path):
         for file in sub_files:
-            if ".json" in file:
+            if file.endswith(".json"):
                 file_path = Path(cur_dir_path) / file
             else:
                 continue
-            json_obj = json.loads(file_path.read_text())
-            if "train" in json_obj.keys():
-                tasks.append(json_obj)
-            else:
-                for task in json_obj.values():
-                    if isinstance(task, dict) and "train" in task.keys():
-                        tasks.append(task)
+            task = json.loads(file_path.read_text())
+            if (
+                isinstance(task, list) and "input" in task[0].keys()
+            ) or "train" in task.keys():
+                tasks.append(task)
     return tasks
+
+
+def create_syn_data(
+    output_path,
+    source_path,
+    tokenizer,
+    shard_size,
+    num_aug,
+):
+    data_path = Path(source_path)
+    output_path = Path(output_path)
+    tasks = get_tasks(data_path)
+    augmentor = Augmentor()
+    data = []
+    #Without Augmentation
+    for task in tasks:
+        task = tokenizer.encode(task)
+        np_task = np.array(task, dtype=np.uint8)
+        data.append(np_task)
+    #With Augmentation
+    for _ in range(num_aug):
+        copy_tasks = deepcopy(tasks)
+        for task in copy_tasks:
+            random.shuffle(task)
+            task = augmentor(task)
+            task = tokenizer.encode(task)
+            np_task = np.array(task, dtype=np.uint8)
+            data.append(np_task)
+
+    random.shuffle(data) 
+    np_data = np.concatenate(data)
+    num_shards = len(np_data) // shard_size
+    shards = np.array_split(np_data, num_shards)
+    for i, shard in enumerate(shards, start=1):
+        np.save(output_path / f"training_{i}.npy", shard)
+    print(f"Synthetic data is created with total {i} shards.")
+    last_shard_num = i
+    return last_shard_num
 
 
 def create_data(
@@ -76,11 +112,16 @@ def create_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--train_data_path", type=str, default="data/ARC-AGI-2-data/training")
-    parser.add_argument("--val_data_path", type=str, default="data/ARC-AGI-2-data/training")
+    parser.add_argument("--syn_data_path", type=str, default="data/re_arc/tasks")
+    parser.add_argument("--syn_shard_size", type=int, default=int(1e7))
+    parser.add_argument("--syn_num_aug", type=int, default=1)
+    parser.add_argument("--train_data_path", type=str, default="data/ARC-AGI-2/data")
+    parser.add_argument(
+        "--val_data_path", type=str, default="data/ARC-AGI-2/data/training"
+    )
     parser.add_argument("--processed_data_path", type=str, default="data/pretraining")
-    parser.add_argument("--num_shards", type=int, default=10)
-    parser.add_argument("--num_repeat_per_shard", type=int, default=1)
+    parser.add_argument("--aug_num_shards", type=int, default=10)
+    parser.add_argument("--aug_num_repeat_per_shard", type=int, default=1)
     parser.add_argument("--vocab_size", type=int, default=16)
     parser.add_argument("--num_workers", type=int, default=10)
     parser.add_argument("--tokenizer_save_path", type=str, default="")
@@ -90,6 +131,7 @@ if __name__ == "__main__":
     tokenizer = Tokenizer(args.vocab_size)
 
     PROCESSED_DATA_PATH = Path(args.processed_data_path)
+    SYN_DATA_PATH = Path(args.syn_data_path)
     TRAIN_DATA_PATH = Path(args.train_data_path)
     VAL_DATA_PATH = Path(args.val_data_path)
 
@@ -101,6 +143,14 @@ if __name__ == "__main__":
             PROCESSED_DATA_PATH.mkdir(parents=True)
 
         print("Training data is being created.")
+        last_shard_num = create_syn_data(
+            output_path=PROCESSED_DATA_PATH,
+            source_path=SYN_DATA_PATH,
+            tokenizer=tokenizer,
+            shard_size=int(1e7),
+            num_aug=1,
+        )
+
         train_create_data = functools.partial(
             create_data,
             source_path=TRAIN_DATA_PATH,
@@ -108,12 +158,12 @@ if __name__ == "__main__":
             is_train=True,
             rolled=True,
             augmented=True,
-            num_repeat=args.num_repeat_per_shard,
+            num_repeat=args.aug_num_repeat_per_shard,
         )
 
         training_file_paths = [
             PROCESSED_DATA_PATH / f"training_{i}.npy"
-            for i in range(1, args.num_shards + 1)
+            for i in range(last_shard_num + 1, args.aug_num_shards + last_shard_num + 1)
         ]
         with futures.ProcessPoolExecutor(args.num_workers) as executor:
             for outfile_path in executor.map(train_create_data, training_file_paths):

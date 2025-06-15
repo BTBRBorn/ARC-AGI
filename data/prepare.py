@@ -26,13 +26,15 @@ if __name__ == "__main__":
 
     with open(source_file, "r") as fhandle:
         source_json = json.load(fhandle)
-    
-    with open(solutions_file, "r") as fhandle:
-        solutions_json = json.load(fhandle)
 
-    for key, task in source_json.items():
-        for idx, example in enumerate(task['test']):
-            example['output'] = solutions_json[key][idx]
+    #Attach solutions to the source if exists 
+    if args.solutions_file:
+        with open(solutions_file, "r") as fhandle:
+            solutions_json = json.load(fhandle)
+
+        for key, task in source_json.items():
+            for idx, example in enumerate(task['test']):
+                example['output'] = solutions_json[key][idx]
 
     for key in source_json.keys():
         file_name = key + ".json"

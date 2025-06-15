@@ -81,7 +81,7 @@ def train(
     device,
     world_size,
 ):
-    base_model, model = models 
+    base_model, model = models
     model.train()
     total_iter = len(train_dataloader) // scheduler_intervals
     current_iter = len(results["train_losses"]) + 1
@@ -108,7 +108,7 @@ def train(
         )
 
         if is_master:
-            avg_loss += (train_loss.item() * grad_accum_num)
+            avg_loss += train_loss.item() * grad_accum_num
             if norm is not None:
                 norms.append(norm.item())
 
@@ -136,22 +136,21 @@ def train(
                 total_tokens = 0
                 start = time.perf_counter()
 
-        #Every grad_accum_intervals iterations increase batch accumulation by one
-        if not (batch_num % grad_accum_intervals): 
+        # Every grad_accum_intervals iterations increase batch accumulation by one
+        if not (batch_num % grad_accum_intervals):
             grad_accum_num += 1
             results["grad_accum_num"] = grad_accum_num
             if is_master:
                 print(f"Gradient accumulation is increased to: {grad_accum_num}")
 
-        #Checkpoint and validation
+        # Checkpoint and validation
         if not (batch_num % checkpoint_intervals):
-
             val_loss = val_step(
                 model=model, dataloader=val_dataloader, config=config, device=device
             )
 
             if is_master:
-                current_iter = len(results['train_losses']) + 1
+                current_iter = len(results["train_losses"]) + 1
                 print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
                 results["val_losses"].append((current_iter, val_loss))
 
@@ -165,6 +164,5 @@ def train(
                     config=config,
                     results=results,
                 )
-
 
     return results

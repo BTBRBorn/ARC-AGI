@@ -7,7 +7,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--source_file", type=str)
-    parser.add_argument("--solutions_file", type=str)
+    parser.add_argument("--solutions_file", type=str, default="")
     parser.add_argument("--target_dir", type=str)
 
     args = parser.parse_args()

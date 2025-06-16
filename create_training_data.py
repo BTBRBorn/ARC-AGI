@@ -30,42 +30,57 @@ def get_tasks(data_path):
     return tasks
 
 
+def process_syn_task(task, tokenizer: Tokenizer, augmentor: Augmentor = None):
+    if augmentor is not None:
+        random.shuffle(task)
+        augmentor(task)
+    task = tokenizer.encode(task)
+    np_task = np.array(task, dtype=np.uint8)
+    return np_task
+
+
+def save_syn_shard(data, shard_size, output_path, start_index):
+    random.shuffle(data)
+    np_data = np.concatenate(data)
+    num_shards = len(np_data) // shard_size
+    shards = np.array_split(np_data, num_shards)
+    for i, shard in enumerate(shards, start=start_index):
+        file_path = output_path / f"training_{i}.npy"
+        print(f"File {file_path} is created.")
+        np.save(file_path, shard)
+    last_index = i
+    return last_index
+
+
 def create_syn_data(
     output_path,
     source_path,
     tokenizer,
     shard_size,
     num_aug,
+    num_workers,
 ):
     data_path = Path(source_path)
     output_path = Path(output_path)
     tasks = get_tasks(data_path)
     augmentor = Augmentor()
-    data = []
-    #Without Augmentation
-    for task in tasks:
-        task = tokenizer.encode(task)
-        np_task = np.array(task, dtype=np.uint8)
-        data.append(np_task)
-    #With Augmentation
-    for _ in range(num_aug):
-        copy_tasks = deepcopy(tasks)
-        for task in copy_tasks:
-            random.shuffle(task)
-            task = augmentor(task)
-            task = tokenizer.encode(task)
-            np_task = np.array(task, dtype=np.uint8)
-            data.append(np_task)
 
-    random.shuffle(data) 
-    np_data = np.concatenate(data)
-    num_shards = len(np_data) // shard_size
-    shards = np.array_split(np_data, num_shards)
-    for i, shard in enumerate(shards, start=1):
-        np.save(output_path / f"training_{i}.npy", shard)
-    print(f"Synthetic data is created with total {i} shards.")
-    last_shard_num = i
-    return last_shard_num
+    # Without Augmentation
+    process_without_aug = functools.partial(process_syn_task, tokenizer=tokenizer)
+    with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        data = list(executor.map(process_without_aug, tasks))
+    last_index = save_syn_shard(data, shard_size, output_path, start_index=1)
+
+    # With Augmentation
+    process_with_aug = functools.partial(
+        process_without_aug, tokenizer=tokenizer, augmentor=augmentor
+    )
+    for _ in range(num_aug):
+        with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            data = list(executor.map(process_with_aug, tasks))
+        last_index = save_syn_shard(data, shard_size, output_path, last_index + 1)
+    print("Finished with creating synthetic data.")
+    return last_index
 
 
 def create_data(
@@ -112,7 +127,7 @@ def create_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--syn_data_path", type=str, default="data/re_arc/tasks")
+    parser.add_argument("--syn_data_path", type=str, default="data/arc_syn/tasks")
     parser.add_argument("--syn_shard_size", type=int, default=int(1e7))
     parser.add_argument("--syn_num_aug", type=int, default=1)
     parser.add_argument("--train_data_path", type=str, default="data/ARC-AGI-2/data")
@@ -147,8 +162,9 @@ if __name__ == "__main__":
             output_path=PROCESSED_DATA_PATH,
             source_path=SYN_DATA_PATH,
             tokenizer=tokenizer,
-            shard_size=int(1e7),
-            num_aug=1,
+            shard_size=args.syn_shard_size,
+            num_aug=args.syn_num_aug,
+            num_workers=args.num_workers,
         )
 
         train_create_data = functools.partial(

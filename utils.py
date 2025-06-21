@@ -74,7 +74,7 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=config.scheduler_iter
+            optimizer, T_max=config.scheduler_iter, eta_min=1e-5,
         )
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     else:
@@ -100,7 +100,8 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
 def plot_losses(results):
     train_loss, val_loss = results["train_losses"], results["val_losses"]
     plt.plot(range(1, len(train_loss) + 1), train_loss, label="training", color="green")
-    plt.plot(range(1, len(val_loss) + 1), val_loss, label="validation", color="red")
+    iters, losses = zip(*val_loss)
+    plt.plot(iters, losses, label="validation", color="red")
     plt.title("Train and Validation Losses vs Num Epochs")
     plt.xlabel("Num Epochs")
     plt.ylabel("Loss")

@@ -1,7 +1,11 @@
-from collections.abc import Iterable
+import os
 import numpy as np
 import random
 import itertools
+from pathlib import Path
+from argparse import ArgumentParser
+import json
+from collections.abc import Iterable
 
 
 # Helper Functions
@@ -434,7 +438,9 @@ def flip_vertical_multi_color(num_repeat, min_size=4, max_size=20):
 
 
 class ArcGenerator:
-    def __init__(self, num_repeat: int | Iterable[int], verbose=False):
+    def __init__(self, num_repeat: int | Iterable[int], output_path: Path, verbose=False):
+        self.verbose = verbose
+        self.output_path = Path(output_path)
         self.task_generators = [
             rect_encap(num_repeat),
             rect_encap_v2(num_repeat),
@@ -444,9 +450,9 @@ class ArcGenerator:
             draw_diagonal_1(num_repeat),
             draw_diagonal_2(num_repeat),
             draw_xs(num_repeat),
-            color_mapping_columns(num_repeat=4),
-            color_mapping_rows(num_repeat=4),
-            color_mapping_dots(num_repeat=4),
+            color_mapping_columns(num_repeat),
+            color_mapping_rows(num_repeat),
+            color_mapping_dots(num_repeat),
             copy_rectangle(num_repeat),
             copy_one_color(num_repeat),
             copy_multi_color(num_repeat),
@@ -459,9 +465,24 @@ class ArcGenerator:
             print(f"{len(self.task_generators)} generators initiated.")
 
     def __call__(self):
-        tasks = []
-        for task_generator in self.task_generators:
-            tasks.append({"train": next(task_generator)})
+        for i, task_generator in enumerate(self.task_generators, start=1):
+            task = next(task_generator)
+            file_path = self.output_path / f"task_{i}.json"
+            file_path.write_text(json.dumps(task))
+            if self.verbose:
+                print(f"File {file_path} is created.")
 
-        random.shuffle(tasks)
-        return tasks
+
+if __name__ == "__main__":
+    arg_parser = ArgumentParser()
+
+    arg_parser.add_argument("--output_folder", type=str)
+    arg_parser.add_argument("--examples_per_task", type=int, default=100)
+    arg_parser.add_argument("--verbose", type=str, choices={0, 1}, default=1)
+
+    args = arg_parser.parse_args()
+
+    os.makedirs(args.output_folder)
+
+    arc_generator = ArcGenerator(args.examples_per_task, args.output_folder, verbose=args.verbose)
+    arc_generator()

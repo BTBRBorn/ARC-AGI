@@ -17,6 +17,7 @@ checkpoints/
 test_checkpoints/
 tokenizers/
 results.json
+gen_arc/
 
 #uv specific
 uv.lock

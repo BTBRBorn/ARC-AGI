@@ -101,6 +101,7 @@ else:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
         T_max=config.scheduler_iter,
+        eta_min=1e-5,
     )
 
     if args.tokenizer_path:

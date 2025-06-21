@@ -152,7 +152,7 @@ def train(
             if is_master:
                 current_iter = len(results["train_losses"]) + 1
                 print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
-                results["val_losses"].append((current_iter, val_loss))
+                results["val_losses"].append((current_iter, val_loss.item()))
 
             if is_master and checkpoint_save_path:
                 utils.save_checkpoint(

@@ -7,7 +7,6 @@ import shutil
 import numpy as np
 import functools
 from concurrent import futures
-from copy import deepcopy
 import os
 
 from get_tokenizer import Tokenizer
@@ -78,7 +77,6 @@ def create_syn_data(
         with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
             data = list(executor.map(process_with_aug, tasks))
         last_index = save_syn_shard(data, shard_size, output_path, last_index + 1)
-    print("Finished with creating synthetic data.")
     return last_index
 
 
@@ -96,10 +94,9 @@ def create_data(
     augmentor = Augmentor()
 
     data = []
-    tasks = get_tasks(data_path)
     for _ in range(num_repeat):
-        copy_tasks = deepcopy(tasks)
-        for task in copy_tasks:
+        tasks = get_tasks(data_path)
+        for task in tasks:
             if is_train:
                 task = task["train"]
                 random.shuffle(task)
@@ -152,9 +149,7 @@ if __name__ == "__main__":
     if not args.only_validation_data:
         if PROCESSED_DATA_PATH.exists():
             shutil.rmtree(PROCESSED_DATA_PATH)
-            PROCESSED_DATA_PATH.mkdir(parents=True)
-        else:
-            PROCESSED_DATA_PATH.mkdir(parents=True)
+        PROCESSED_DATA_PATH.mkdir(parents=True)
 
         print("Training data is being created.")
         last_shard_num = create_syn_data(
@@ -165,6 +160,7 @@ if __name__ == "__main__":
             num_aug=args.syn_num_aug,
             num_workers=args.num_workers,
         )
+        print("Finished with creating synthetic data.")
 
         train_create_data = functools.partial(
             create_data,
@@ -183,6 +179,7 @@ if __name__ == "__main__":
         with futures.ProcessPoolExecutor(args.num_workers) as executor:
             for outfile_path in executor.map(train_create_data, training_file_paths):
                 print(f"File {outfile_path} is created.")
+        print("Finished with creating augmented competition data.")
 
     # Validation data is being created
     create_data(

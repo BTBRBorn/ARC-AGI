@@ -15,7 +15,6 @@ from get_augmentor import Augmentor
 
 
 def get_tasks(data_path):
-    tasks = []
     for cur_dir_path, _, sub_files in os.walk(data_path):
         for file in sub_files:
             if file.endswith(".json"):
@@ -26,9 +25,8 @@ def get_tasks(data_path):
             if (
                 isinstance(task, list) and "input" in task[0].keys()
             ) or "train" in task.keys():
-                tasks.append(task)
-    return tasks
-
+                yield task
+                
 
 def process_syn_task(task, tokenizer: Tokenizer, augmentor: Augmentor = None):
     if augmentor is not None:
@@ -62,20 +60,21 @@ def create_syn_data(
 ):
     data_path = Path(source_path)
     output_path = Path(output_path)
-    tasks = get_tasks(data_path)
     augmentor = Augmentor()
 
     # Without Augmentation
     process_without_aug = functools.partial(process_syn_task, tokenizer=tokenizer)
+    tasks = get_tasks(data_path)
     with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
         data = list(executor.map(process_without_aug, tasks))
     last_index = save_syn_shard(data, shard_size, output_path, start_index=1)
 
     # With Augmentation
     process_with_aug = functools.partial(
-        process_without_aug, tokenizer=tokenizer, augmentor=augmentor
+        process_syn_task, tokenizer=tokenizer, augmentor=augmentor
     )
     for _ in range(num_aug):
+        tasks = get_tasks(data_path)
         with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
             data = list(executor.map(process_with_aug, tasks))
         last_index = save_syn_shard(data, shard_size, output_path, last_index + 1)

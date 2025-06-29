@@ -74,7 +74,7 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=config.scheduler_iter, eta_min=1e-5,
+            optimizer, T_max=config.scheduler_iter, eta_min=1e-6,
         )
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     else:

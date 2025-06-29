@@ -150,7 +150,7 @@ def train(
             )
 
             if is_master:
-                current_iter = len(results["train_losses"]) + 1
+                current_iter = len(results["train_losses"])
                 print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
                 results["val_losses"].append((current_iter, val_loss.item()))
 

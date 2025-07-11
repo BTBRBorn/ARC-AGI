@@ -96,7 +96,7 @@ else:
 
     models = (base_model, model)
 
-    optimizer = utils.configure_optimizer(model)
+    optimizer = utils.configure_optimizer(model, config)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer,

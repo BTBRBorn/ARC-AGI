@@ -11,11 +11,18 @@ import math
 
 
 class Evaluator:
-    def __init__(self, path_to_checkpoint, path_to_tasks, k_beam):
+    def __init__(self, path_to_checkpoint, path_to_tasks, k_beam, device):
         self.path_to_checkpoint = Path(path_to_checkpoint)
         self.path_to_tasks = Path(path_to_tasks)
         self.k_beam = k_beam
-        self.checkpoint = load_checkpoint(path_to_checkpoint)
+        self.device = device
+        self.checkpoint = load_checkpoint(
+            path_to_checkpoint,
+            device,
+            compile_model=False,
+            with_model=True,
+            ddp_model=False,
+        )
 
     def _create_context(self, task, test_index, tokenizer):
         new_task = {}
@@ -90,7 +97,7 @@ class Evaluator:
                     break
                 context = torch.cat(not_finished_seqs, dim=0)
                 context = context[:, -config.block_size :]
-                with torch.autocast(device_type=config.device, dtype=torch.bfloat16):
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                     logits = model(context)[:, -1, :]
                 log_probs = F.log_softmax(logits, dim=-1)
                 top_log_probs, top_tokens = torch.topk(log_probs, k=k_beam, dim=-1)
@@ -140,7 +147,7 @@ class Evaluator:
         tokenizer = self.checkpoint["tokenizer"]
         config = self.checkpoint["config"]
         context, con_len = self._create_context(task, test_index, tokenizer)
-        context = torch.tensor(context, device=config.device).view(1, -1)
+        context = torch.tensor(context, device=self.device).view(1, -1)
         solutions = self._beam_search(
             model,
             context,
@@ -235,5 +242,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    evaluator = Evaluator(args.checkpoint_path, args.tasks_path, args.k_beam)
+    device = torch.device("cuda:0")
+    evaluator = Evaluator(
+        args.checkpoint_path, args.tasks_path, args.k_beam, device=device
+    )
     evaluator.evaluate(verbose=bool(args.verbose))

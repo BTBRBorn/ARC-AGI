@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from torch.nn.parallel import DistributedDataParallel as DDP
 from matplotlib.colors import Normalize, ListedColormap
 
-def configure_optimizer(model):
-    config = model.module.config
+def configure_optimizer(model, config):
 
     optim_groups = [
         {
@@ -49,7 +48,7 @@ def save_checkpoint(
     )
 
 
-def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, weight_only=False):
+def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, ddp_model=True, weight_only=False):
 
     checkpoint = torch.load(Path(checkpoint_path), weights_only=weight_only)
 
@@ -66,11 +65,17 @@ def load_checkpoint(checkpoint_path, device, compile_model, with_model=True, wei
 
         if compile_model:
             compiled_model = torch.compile(base_model)
-            model = DDP(compiled_model, device_ids=[device])
+            if ddp_model:
+                model = DDP(compiled_model, device_ids=[device])
+            else:
+                model = compiled_model
         else:
-            model = DDP(base_model, device_ids=[device])
+            if ddp_model:
+                model = DDP(base_model, device_ids=[device])
+            else:
+                model = base_model
 
-        optimizer = configure_optimizer(model)
+        optimizer = configure_optimizer(model, config)
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

@@ -224,12 +224,8 @@ class Evaluator:
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-        overall_acc = (sum(task_acc) / len(task_acc)) * 100
-        overall_pixel_acc = (sum(pixel_acc) / len(pixel_acc)) * 100
-
-        print(
-            f"Overall accuracy: {overall_acc:.2f}%, "
-            + f"Overall pixel accuracy: {overall_pixel_acc:.2f}%"
+        return torch.tensor(sum(task_acc), device=self.device), torch.tensor(
+            sum(pixel_acc), device=self.device
         )
 
 
@@ -255,12 +251,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     all_paths = [Path(args.tasks_path) / file for file in os.listdir(args.tasks_path)]
-    shard_len = len(all_paths) // world_size
+    total_tasks = len(all_paths)
+    shard_len = total_tasks // world_size
     if rank == world_size - 1:
         task_paths = all_paths[rank * shard_len :]
     else:
         task_paths = all_paths[rank * shard_len : (rank + 1) * shard_len]
-    print(f"shard_len: {shard_len}")
 
     evaluator = Evaluator(
         path_to_checkpoint=args.checkpoint_path,
@@ -268,7 +264,16 @@ if __name__ == "__main__":
         k_beam=args.k_beam,
         device=device,
     )
-    print(f"evaluator id:{id(evaluator)}")
-    evaluator.evaluate(verbose=bool(args.verbose))
+    task_acc_sum, pixel_acc_sum = evaluator.evaluate(verbose=bool(args.verbose))
+
+    dist.all_reduce(task_acc_sum, op=dist.ReduceOp.SUM)
+    dist.all_reduce(pixel_acc_sum, op=dist.ReduceOp.SUM)
+    task_acc_avg = task_acc_sum.item() / total_tasks
+    pixel_acc_avg = pixel_acc_sum.item() / total_tasks
+
+    print(
+        f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
+        + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"
+    )
 
     dist.destroy_process_group()

@@ -1,3 +1,6 @@
+# Multi-gpu inference script
+# This script is setup to run with torchrun
+
 import torch
 import torch.nn.functional as F
 from copy import deepcopy
@@ -9,19 +12,20 @@ import argparse
 from collections import deque
 import math
 
+# Modules are needed for multi-gpu inference
+import torch.distributed as dist
+
 
 class Evaluator:
-    def __init__(self, path_to_checkpoint, path_to_tasks, k_beam, device):
+    def __init__(self, path_to_checkpoint, task_paths, k_beam, device):
         self.path_to_checkpoint = Path(path_to_checkpoint)
-        self.path_to_tasks = Path(path_to_tasks)
+        self.task_paths = task_paths
         self.k_beam = k_beam
         self.device = device
         self.checkpoint = load_checkpoint(
             path_to_checkpoint,
             device,
             compile_model=False,
-            with_model=True,
-            ddp_model=False,
         )
 
     def _create_context(self, task, test_index, tokenizer):
@@ -97,7 +101,7 @@ class Evaluator:
                     break
                 context = torch.cat(not_finished_seqs, dim=0)
                 context = context[:, -config.block_size :]
-                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                     logits = model(context)[:, -1, :]
                 log_probs = F.log_softmax(logits, dim=-1)
                 top_log_probs, top_tokens = torch.topk(log_probs, k=k_beam, dim=-1)
@@ -191,12 +195,9 @@ class Evaluator:
 
     def evaluate(self, verbose=False):
         model = self.checkpoint["model"]
-        task_paths = [
-            self.path_to_tasks / file for file in os.listdir(self.path_to_tasks)
-        ]
         task_acc, pixel_acc = [], []
-        total_tasks = len(task_paths)
-        for task_number, task_path in enumerate(task_paths, start=1):
+        total_tasks = len(self.task_paths)
+        for task_number, task_path in enumerate(self.task_paths, start=1):
             with open(task_path, "r") as fhandle:
                 task = json.load(fhandle)
 
@@ -218,7 +219,7 @@ class Evaluator:
                 pixel_acc.append(p_acc)
                 if verbose:
                     print(
-                        f"Task {task_number!s:>3s}/{total_tasks} test {tx + 1}, "
+                        f"Task({task_path.name}) {task_number!s:>3s}/{total_tasks}: test {tx + 1}, "
                         + f"context length: {con_len!s:>4s}, task solved: {task_acc[-1]}, "
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
@@ -233,6 +234,17 @@ class Evaluator:
 
 
 if __name__ == "__main__":
+    dist.init_process_group(backend="nccl")
+
+    # torchrun will handle setting up environment variables
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    device = torch.device(f"cuda:{rank}")
+    torch.cuda.set_device(device)
+
+    print(f"rank: {rank}")
+    print(f"world_size: {world_size}")
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--checkpoint_path", type=str)
@@ -242,8 +254,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    device = torch.device("cuda:0")
+    all_paths = [Path(args.tasks_path) / file for file in os.listdir(args.tasks_path)]
+    shard_len = len(all_paths) // world_size
+    if rank == world_size - 1:
+        task_paths = all_paths[rank * shard_len :]
+    else:
+        task_paths = all_paths[rank * shard_len : (rank + 1) * shard_len]
+    print(f"shard_len: {shard_len}")
+
     evaluator = Evaluator(
-        args.checkpoint_path, args.tasks_path, args.k_beam, device=device
+        path_to_checkpoint=args.checkpoint_path,
+        task_paths=task_paths,
+        k_beam=args.k_beam,
+        device=device,
     )
+    print(f"evaluator id:{id(evaluator)}")
     evaluator.evaluate(verbose=bool(args.verbose))
+
+    dist.destroy_process_group()

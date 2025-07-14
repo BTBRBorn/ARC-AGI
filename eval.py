@@ -238,9 +238,6 @@ if __name__ == "__main__":
     device = torch.device(f"cuda:{rank}")
     torch.cuda.set_device(device)
 
-    print(f"rank: {rank}")
-    print(f"world_size: {world_size}")
-
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--checkpoint_path", type=str)

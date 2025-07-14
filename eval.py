@@ -230,13 +230,6 @@ class Evaluator:
 
 
 if __name__ == "__main__":
-    dist.init_process_group(backend="nccl")
-
-    # torchrun will handle setting up environment variables
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    device = torch.device(f"cuda:{rank}")
-    torch.cuda.set_device(device)
 
     parser = argparse.ArgumentParser()
 
@@ -246,6 +239,16 @@ if __name__ == "__main__":
     parser.add_argument("--k_beam", type=int, default=1)
 
     args = parser.parse_args()
+
+
+    dist.init_process_group(backend="nccl")
+
+    # torchrun will handle setting up environment variables
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+    device = torch.device(f"cuda:{rank}")
+    master_process = rank == 0
+    torch.cuda.set_device(device)
 
     all_paths = [Path(args.tasks_path) / file for file in os.listdir(args.tasks_path)]
     total_tasks = len(all_paths)
@@ -268,9 +271,10 @@ if __name__ == "__main__":
     task_acc_avg = task_acc_sum.item() / total_tasks
     pixel_acc_avg = pixel_acc_sum.item() / total_tasks
 
-    print(
-        f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
-        + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"
-    )
+    if master_process:
+        print(
+            f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
+            + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"
+        )
 
     dist.destroy_process_group()

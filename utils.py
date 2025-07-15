@@ -64,8 +64,8 @@ def load_checkpoint(checkpoint_path, device, compile_model=False, with_model=Tru
         base_model.load_state_dict(checkpoint["model_state_dict"])
 
         if compile_model:
-            compiled_model = torch.compile(base_model)
-            model = DDP(compiled_model, device_ids=[device])
+            model = DDP(base_model, device_ids=[device])
+            model = torch.compile(model)
         else:
             model = DDP(base_model, device_ids=[device])
 

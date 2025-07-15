@@ -90,8 +90,8 @@ if __name__ == "__main__":
             base_model = model
 
         if args.compile_model:
-            model_compiled = torch.compile(base_model)
-            model = DDP(model_compiled, device_ids=[device])
+            model = DDP(base_model, device_ids=[device])
+            model = torch.compile(model)
         else:
             model = DDP(base_model, device_ids=[device])
 

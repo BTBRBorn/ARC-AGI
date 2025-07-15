@@ -244,9 +244,10 @@ if __name__ == "__main__":
     dist.init_process_group(backend="nccl")
 
     # torchrun will handle setting up environment variables
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-    device = torch.device(f"cuda:{rank}")
+    rank = int(os.environ['RANK'])
+    local_rank = int(os.environ['LOCAL_RANK'])
+    world_size = int(os.environ['WORLD_SIZE'])
+    device = torch.device(f"cuda:{local_rank}")
     master_process = rank == 0
     torch.cuda.set_device(device)
 
@@ -266,8 +267,8 @@ if __name__ == "__main__":
     )
     task_acc_sum, pixel_acc_sum = evaluator.evaluate(verbose=bool(args.verbose))
 
-    dist.all_reduce(task_acc_sum, op=dist.ReduceOp.SUM)
-    dist.all_reduce(pixel_acc_sum, op=dist.ReduceOp.SUM)
+    dist.reduce(task_acc_sum, dst=0, op=dist.ReduceOp.SUM)
+    dist.reduce(pixel_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     task_acc_avg = task_acc_sum.item() / total_tasks
     pixel_acc_avg = pixel_acc_sum.item() / total_tasks
 

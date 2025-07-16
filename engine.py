@@ -88,6 +88,10 @@ def train(
     grad_accum_num = results["grad_accum_num"]
     if is_master:
         print(f"Continuing training from iteration: {current_iter}")
+        val_loss = val_step(
+            model=model, dataloader=val_dataloader, config=config, device=device
+        )
+        print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
     batch_tokens = config.batch_size * config.block_size * world_size
     total_tokens = 0
     iter_num = 0

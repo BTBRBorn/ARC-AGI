@@ -224,8 +224,8 @@ class Evaluator:
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-        return torch.tensor(sum(task_acc), device=self.device), torch.tensor(
-            sum(pixel_acc), device=self.device
+        return torch.tensor(sum(task_acc), device=self.device, dtype=torch.float32), torch.tensor(
+            sum(pixel_acc), device=self.device, dtype=torch.float32
         )
 
 
@@ -267,6 +267,9 @@ if __name__ == "__main__":
     )
     task_acc_sum, pixel_acc_sum = evaluator.evaluate(verbose=bool(args.verbose))
 
+    #barrier is needed against timeouts
+    #in case one of the gpus finish its work too early
+    dist.barrier()
     dist.reduce(task_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     dist.reduce(pixel_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     task_acc_avg = task_acc_sum.item() / total_tasks
@@ -277,5 +280,5 @@ if __name__ == "__main__":
             f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
             + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"
         )
-
+    
     dist.destroy_process_group()

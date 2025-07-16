@@ -130,14 +130,16 @@ class Evaluator:
                     reverse=True,
                 )[:k_beam]
 
-        solutions = [
-            (
-                tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"],
-                score / seq.shape[1],
-            )
-            for seq, score, finished in beams
-            if finished
-        ]
+        solutions = []
+        for seq, score, finished in beams:
+            if finished:
+                try:
+                    solution = tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"]
+                    norm_score = score / seq.shape[1]
+                    solutions.append((solution, norm_score))
+                except KeyError as err:
+                    print("KeyError:", err)
+                    continue
 
         return solutions
 

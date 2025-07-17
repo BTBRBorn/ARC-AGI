@@ -11,6 +11,7 @@ import json
 import argparse
 from collections import deque
 import math
+import random
 
 # Modules are needed for multi-gpu inference
 import torch.distributed as dist
@@ -226,12 +227,33 @@ class Evaluator:
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-        return torch.tensor(sum(task_acc), device=self.device, dtype=torch.float32), torch.tensor(
-            sum(pixel_acc), device=self.device, dtype=torch.float32
-        )
+        task_acc_sum = torch.tensor(sum(task_acc), device=self.device, dtype=torch.float32)
+        pixel_acc_sum = torch.tensor(sum(pixel_acc), device=self.device, dtype=torch.float32)
 
+        return task_acc_sum, pixel_acc_sum
+
+
+def get_balanced_filelists(all_tasks: list, numsplits: int):
+    files_with_size = []
+    for file_path in all_tasks:
+        file_size = os.path.getsize(file_path)
+        files_with_size.append((file_path, file_size))
+    files_with_size.sort(key=lambda x: x[1], reverse=True)
+    gpu_bins = [[] for _ in range(numsplits)]
+    gpu_sizes = [0 for _ in range(numsplits)]
+    for file_path, size in files_with_size:
+        idx = min(range(len(gpu_sizes)), key=lambda i: gpu_sizes[i])
+        gpu_bins[idx].append(file_path)
+        gpu_sizes[idx] += size
+    
+    for bin in gpu_bins:
+        random.shuffle(bin)
+
+    return gpu_bins, gpu_sizes
 
 if __name__ == "__main__":
+
+    random.seed(1)
 
     parser = argparse.ArgumentParser()
 
@@ -241,7 +263,6 @@ if __name__ == "__main__":
     parser.add_argument("--k_beam", type=int, default=1)
 
     args = parser.parse_args()
-
 
     dist.init_process_group(backend="nccl")
 
@@ -253,13 +274,14 @@ if __name__ == "__main__":
     master_process = rank == 0
     torch.cuda.set_device(device)
 
-    all_paths = [Path(args.tasks_path) / file for file in os.listdir(args.tasks_path)]
-    total_tasks = len(all_paths)
-    shard_len = total_tasks // world_size
-    if rank == world_size - 1:
-        task_paths = all_paths[rank * shard_len :]
-    else:
-        task_paths = all_paths[rank * shard_len : (rank + 1) * shard_len]
+    
+    data_path = Path(args.tasks_path)
+    all_tasks = [data_path / file for file in os.listdir(data_path)]
+    total_tasks = len(all_tasks)
+
+    gpu_bins, gpu_sizes = get_balanced_filelists(all_tasks, world_size)
+    print(f"Rank {rank} gpu will be processing: {gpu_sizes[rank] / 1e6: .2f} MBs.")
+    task_paths = gpu_bins[rank]
 
     evaluator = Evaluator(
         path_to_checkpoint=args.checkpoint_path,
@@ -269,9 +291,6 @@ if __name__ == "__main__":
     )
     task_acc_sum, pixel_acc_sum = evaluator.evaluate(verbose=bool(args.verbose))
 
-    #barrier is needed against timeouts
-    #in case one of the gpus finish its work too early
-    dist.barrier()
     dist.reduce(task_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     dist.reduce(pixel_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     task_acc_avg = task_acc_sum.item() / total_tasks

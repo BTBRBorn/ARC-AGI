@@ -86,11 +86,14 @@ def train(
     total_iter = len(train_dataloader) // scheduler_intervals
     current_iter = len(results["train_losses"]) + 1
     grad_accum_num = results["grad_accum_num"]
+    val_loss = val_step(
+        model=model,
+        dataloader=val_dataloader,
+        config=config,
+        device=device,
+    )
     if is_master:
         print(f"Continuing training from iteration: {current_iter}")
-        val_loss = val_step(
-            model=model, dataloader=val_dataloader, config=config, device=device
-        )
         print(f"Validation Loss after iteration {current_iter}: {val_loss:.4f}")
     batch_tokens = config.batch_size * config.block_size * world_size
     total_tokens = 0

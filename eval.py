@@ -135,7 +135,9 @@ class Evaluator:
         for seq, score, finished in beams:
             if finished:
                 try:
-                    solution = tokenizer.decode(seq.tolist()[0], only_last_output=True)[0]["output"]
+                    solution = tokenizer.decode(seq.tolist()[0], only_last_output=True)[
+                        0
+                    ]["output"]
                     norm_score = score / seq.shape[1]
                     solutions.append((solution, norm_score))
                 except KeyError as err:
@@ -227,8 +229,12 @@ class Evaluator:
                         + f"pixel accuracy percentage: {pixel_acc[-1] * 100:.2f}%"
                     )
 
-        task_acc_sum = torch.tensor(sum(task_acc), device=self.device, dtype=torch.float32)
-        pixel_acc_sum = torch.tensor(sum(pixel_acc), device=self.device, dtype=torch.float32)
+        task_acc_sum = torch.tensor(
+            sum(task_acc), device=self.device, dtype=torch.float32
+        )
+        pixel_acc_sum = torch.tensor(
+            sum(pixel_acc), device=self.device, dtype=torch.float32
+        )
 
         return task_acc_sum, pixel_acc_sum
 
@@ -236,8 +242,10 @@ class Evaluator:
 def get_balanced_filelists(all_tasks: list, numsplits: int):
     files_with_size = []
     for file_path in all_tasks:
+        task = json.loads(file_path.read_text())
+        num_tests = len(task["test"])
         file_size = os.path.getsize(file_path)
-        files_with_size.append((file_path, file_size))
+        files_with_size.append((file_path, file_size * num_tests))
     files_with_size.sort(key=lambda x: x[1], reverse=True)
     gpu_bins = [[] for _ in range(numsplits)]
     gpu_sizes = [0 for _ in range(numsplits)]
@@ -245,14 +253,14 @@ def get_balanced_filelists(all_tasks: list, numsplits: int):
         idx = min(range(len(gpu_sizes)), key=lambda i: gpu_sizes[i])
         gpu_bins[idx].append(file_path)
         gpu_sizes[idx] += size
-    
+
     for bin in gpu_bins:
         random.shuffle(bin)
 
     return gpu_bins, gpu_sizes
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     random.seed(1)
 
     parser = argparse.ArgumentParser()
@@ -267,21 +275,24 @@ if __name__ == "__main__":
     dist.init_process_group(backend="nccl")
 
     # torchrun will handle setting up environment variables
-    rank = int(os.environ['RANK'])
-    local_rank = int(os.environ['LOCAL_RANK'])
-    world_size = int(os.environ['WORLD_SIZE'])
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
     device = torch.device(f"cuda:{local_rank}")
     master_process = rank == 0
     torch.cuda.set_device(device)
 
-    
     data_path = Path(args.tasks_path)
     all_tasks = [data_path / file for file in os.listdir(data_path)]
     total_tasks = len(all_tasks)
 
     gpu_bins, gpu_sizes = get_balanced_filelists(all_tasks, world_size)
-    print(f"Rank {rank} gpu will be processing: {gpu_sizes[rank] / 1e6: .2f} MBs.")
     task_paths = gpu_bins[rank]
+    if master_process:
+        for rank in range(world_size):
+            print(
+                f"Rank {rank} gpu will be processing: {gpu_sizes[rank] / 1e6: .2f} MBs."
+            )
 
     evaluator = Evaluator(
         path_to_checkpoint=args.checkpoint_path,
@@ -301,5 +312,5 @@ if __name__ == "__main__":
             f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
             + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"
         )
-    
+
     dist.destroy_process_group()

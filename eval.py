@@ -241,9 +241,11 @@ class Evaluator:
 
 def get_balanced_filelists(all_tasks: list, numsplits: int):
     files_with_size = []
+    total_tasks = 0
     for file_path in all_tasks:
         task = json.loads(file_path.read_text())
         num_tests = len(task["test"])
+        total_tasks += num_tests
         file_size = os.path.getsize(file_path)
         files_with_size.append((file_path, file_size * num_tests))
     files_with_size.sort(key=lambda x: x[1], reverse=True)
@@ -257,7 +259,7 @@ def get_balanced_filelists(all_tasks: list, numsplits: int):
     for bin in gpu_bins:
         random.shuffle(bin)
 
-    return gpu_bins, gpu_sizes
+    return gpu_bins, gpu_sizes, total_tasks
 
 
 if __name__ == "__main__":
@@ -284,9 +286,8 @@ if __name__ == "__main__":
 
     data_path = Path(args.tasks_path)
     all_tasks = [data_path / file for file in os.listdir(data_path)]
-    total_tasks = len(all_tasks)
 
-    gpu_bins, gpu_sizes = get_balanced_filelists(all_tasks, world_size)
+    gpu_bins, gpu_sizes, total_tasks = get_balanced_filelists(all_tasks, world_size)
     task_paths = gpu_bins[rank]
     if master_process:
         for rank in range(world_size):
@@ -304,10 +305,10 @@ if __name__ == "__main__":
 
     dist.reduce(task_acc_sum, dst=0, op=dist.ReduceOp.SUM)
     dist.reduce(pixel_acc_sum, dst=0, op=dist.ReduceOp.SUM)
-    task_acc_avg = task_acc_sum.item() / total_tasks
-    pixel_acc_avg = pixel_acc_sum.item() / total_tasks
 
     if master_process:
+        task_acc_avg = task_acc_sum.item() / total_tasks
+        pixel_acc_avg = pixel_acc_sum.item() / total_tasks
         print(
             f"Overall accuracy: {100 * task_acc_avg:.2f}%, "
             + f"Overall pixel accuracy: {100 * pixel_acc_avg:.2f}%"

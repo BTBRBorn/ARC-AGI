@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 import functools
 from concurrent import futures
+import multiprocessing as mp
 import os
 
 from get_tokenizer import Tokenizer
@@ -64,7 +65,7 @@ def create_syn_data(
     # Without Augmentation
     process_without_aug = functools.partial(process_syn_task, tokenizer=tokenizer)
     tasks = get_tasks(data_path)
-    with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+    with mp.Pool(processes=num_workers) as executor:
         data = list(executor.map(process_without_aug, tasks))
     last_index = save_syn_shard(data, shard_size, output_path, start_index=1)
 
@@ -74,7 +75,7 @@ def create_syn_data(
     )
     for _ in range(num_aug):
         tasks = get_tasks(data_path)
-        with futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        with mp.Pool(processes=num_workers) as executor:
             data = list(executor.map(process_with_aug, tasks))
         last_index = save_syn_shard(data, shard_size, output_path, last_index + 1)
     return last_index

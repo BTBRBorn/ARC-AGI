@@ -12,6 +12,7 @@ import argparse
 from collections import deque
 import math
 import random
+from datetime import timedelta
 
 # Modules are needed for multi-gpu inference
 import torch.distributed as dist
@@ -146,6 +147,81 @@ class Evaluator:
 
         return solutions
 
+    @staticmethod
+    def _top_p(logits, p):
+        probs = torch.softmax(logits, dim=-1)
+        sorted_probs, sorted_tokens = torch.sort(probs, dim=-1, descending=True)
+        mask = (sorted_probs.cumsum(dim=-1) - sorted_probs) < p
+        top_tokens = torch.where(mask, sorted_tokens, -1)
+        top_log_probs = torch.log(torch.where(mask, sorted_probs, 0.0))
+        return top_log_probs, top_tokens
+
+    def _beam_search_top_p(
+        self,
+        model: torch.nn.Module,
+        context: torch.Tensor,
+        config,
+        tokenizer,
+        tokens_threshold,
+        k_beam,
+        p=0.8,
+    ):
+        # canditates = [(context, score, is_finished)]
+        beams = [(context, 0.0, False)]
+        end_of_output = tokenizer.special_tokens["end_of_output"]
+        with torch.inference_mode():
+            for _ in range(tokens_threshold):
+                candidates = []
+                not_finished_seqs = [seq for seq, _, finished in beams if not finished]
+                # If every beam ends with end_of_output token break early
+                if len(not_finished_seqs) == 0:
+                    break
+                context = torch.cat(not_finished_seqs, dim=0)
+                context = context[:, -config.block_size :]
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    logits = model(context)[:, -1, :]
+                top_log_probs, top_tokens = self._top_p(logits, p=p)
+
+                i = 0
+                for seq, score, _ in beams:
+                    if seq[0, -1].item() == end_of_output:
+                        candidates.append((seq, score, True))
+                        continue
+
+                    for log_prob, token in zip(top_log_probs[i], top_tokens[i]):
+                        if token.item() == -1:
+                            break
+                        next_seq = torch.cat((seq, token.view(1, 1)), dim=-1)
+                        next_score = score + log_prob.item()
+                        candidates.append(
+                            (
+                                next_seq,
+                                next_score,
+                                True if token.item() == end_of_output else False,
+                            )
+                        )
+                    i += 1
+
+                beams = sorted(
+                    candidates,
+                    key=lambda x: x[1] / x[0].shape[1],
+                    reverse=True,
+                )[:k_beam]
+
+        solutions = []
+        for seq, score, finished in beams:
+            if finished:
+                try:
+                    solution = tokenizer.decode(seq.tolist()[0], only_last_output=True)[
+                        0
+                    ]["output"]
+                    norm_score = score / seq.shape[1]
+                    solutions.append((solution, norm_score))
+                except KeyError as err:
+                    print("KeyError:", err)
+                    continue
+
+        return solutions
     def _generate_solutions(
         self,
         model,
@@ -274,7 +350,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    dist.init_process_group(backend="nccl")
+    dist.init_process_group(backend="nccl", timeout=timedelta(minutes=30))
 
     # torchrun will handle setting up environment variables
     rank = int(os.environ["RANK"])

@@ -124,7 +124,7 @@ def create_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--syn_data_path", type=str, default="data/arc_syn/tasks")
+    parser.add_argument("--syn_data_path", type=str, default="data/re_arc/tasks")
     parser.add_argument("--syn_shard_size", type=int, default=int(1e7))
     parser.add_argument("--syn_num_aug", type=int, default=1)
     parser.add_argument("--train_data_path", type=str, default="data/ARC-AGI-2/data")

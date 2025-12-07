@@ -222,6 +222,8 @@ class Evaluator:
                     continue
 
         return solutions
+
+
     def _generate_solutions(
         self,
         model,

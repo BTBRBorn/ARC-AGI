@@ -1,7 +1,3 @@
-Here is a comprehensive README for your GitHub repository.
-
------
-
 # 🤖 ARC-AGI: From-Scratch Autoregressive Transformer for the Abstraction and Reasoning Corpus
 
 ## 🌟 Overview

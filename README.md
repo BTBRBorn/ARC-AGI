@@ -13,3 +13,11 @@ The ARC challenge requires an agent to generalize abstract concepts from very fe
   * **Custom Tokenizer & Serialization:** Specialized tokenizer (`get_tokenizer.py`) designed to convert 2D ARC grids (10 colors + grid structure) into a linear sequence of tokens suitable for autoregressive modeling.
   * **Modular Training Engine:** Separate scripts for training, configuration, and evaluation (`train.py`, `engine.py`, `configurations.py`).
   * **Evaluation Framework:** Dedicated scripts for running inference and evaluating model performance against the ARC metrics (`eval.py`).
+
+### Purpose
+
+This project is dedicated to exploring model architectures that are both more efficient and possess stronger innate reasoning capabilities.
+
+This repository provides a flexible training and evaluation pipeline for testing various architectural hypotheses using ARC-AGI-2 data primarily. The public version includes a GPT-2 style, decoder-only transformer model in `model.py`, which serves as a primary baseline.
+
+The pipeline is fundamentally designed to evaluate **any autoregressive model**. By modifying `model.py`, it can be easily repurposed to test entirely different architectures and concepts.
